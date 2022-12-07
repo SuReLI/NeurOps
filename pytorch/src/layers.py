@@ -48,22 +48,41 @@ class ModLinear(nn.Linear):
 
         fanintoprune: list of neurons to remove from this layer
         fanouttoprune: list of neurons to remove from previous layer
+        optimizer: optimizer to update to new shape of the layer
     """
-    def prune(self, fanintoprune = [], fanouttoprune = []):
+    def prune(self, fanintoprune = [], fanouttoprune = [], optimizer = None):
         fanintokeep = range(self.out_features)
         fanintokeep = [fitk for fitk in fanintokeep if fitk not in fanintoprune]
 
         fanouttokeep = range(self.in_features)
         fanouttokeep = [fotk for fotk in fanouttokeep if fotk not in fanouttoprune]
+        
+        if optimizer is not None:
+            for group in optimizer.param_groups:
+                for p in group['params']:
+                    if p is self.weight:
+                        p.data = p.data[fanintokeep, :][:, fanouttokeep]
+                        for (_,v) in optimizer.state[p]:
+                            if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
+                                v.data = v.data[fanintokeep, :][:, fanouttokeep]
+                    if self.bias is not None and p is self.bias:
+                        p.data = p.data[fanintokeep]
+                        for (_,v) in optimizer.state[p]:
+                            if isinstance(v, torch.Tensor) and v.shape == self.bias.shape:
+                                v.data = v.data[fanintokeep]
 
         if self.masked:
             self.masktensor.data = self.masktensor.data[fanintokeep, :][:, fanouttokeep]
             self.maskvector.data = self.maskvector.data[fanintokeep]
+
         self.weight.data = self.weight.data[fanintokeep, :][:, fanouttokeep]
         if self.bias is not None:
             self.bias.data = self.bias.data[fanintokeep]
+
         self.out_features = len(fanintokeep)
         self.in_features = len(fanouttokeep)
+
+
 
     """
         Add fanin new neurons to the layer (and fanout new inputs to the layer), with 
@@ -79,12 +98,22 @@ class ModLinear(nn.Linear):
         faninweights: weights of the new neurons
         fanoutweights: weights of the new inputs (neurons of previous layer)
     """
-    def grow(self, fanin = 0, fanout = 0, faninweights = None, fanoutweights = None):
+    def grow(self, fanin = 0, fanout = 0, faninweights = None, fanoutweights = None, optimizer = None):
         if fanout > 0:
             if fanoutweights is None:
                 fanoutweights = torch.zeros(self.out_features, fanout)
             if len(fanoutweights.shape) == 1:
                 fanoutweights = fanoutweights.unsqueeze(0)
+
+            if optimizer is not None:
+                for group in optimizer.param_groups:
+                    for p in group['params']:
+                        if p is self.weight:
+                            p.data = torch.cat((p.data, fanoutweights), dim=1)
+                            for (_,v) in optimizer.state[p]:
+                                if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
+                                    v.data = torch.cat((v.data, torch.zeros_like(fanoutweights)), dim=1)
+
             self.weight.data = torch.cat((self.weight.data, fanoutweights), dim=1)
             if self.masked:
                 self.masktensor.data = torch.cat((self.masktensor.data, torch.ones(self.out_features, fanout)), dim=1)
@@ -96,6 +125,21 @@ class ModLinear(nn.Linear):
                 faninweights = torch.zeros(fanin, self.in_features)
             if len(faninweights.shape) == 1:
                 faninweights = faninweights.unsqueeze(1)   
+
+            if optimizer is not None:
+                for group in optimizer.param_groups:
+                    for p in group['params']:
+                        if p is self.weight:
+                            p.data = torch.cat((p.data, faninweights), dim=0)
+                            for (_,v) in optimizer.state[p]:
+                                if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
+                                    v.data = torch.cat((v.data, torch.zeros_like(faninweights)), dim=0)
+                        if self.bias is not None and p is self.bias:
+                            p.data = torch.cat((p.data, torch.zeros(fanin)))
+                            for (_,v) in optimizer.state[p]:
+                                if isinstance(v, torch.Tensor) and v.shape == self.bias.shape:
+                                    v.data = torch.cat((v.data, torch.zeros(fanin)))
+
             self.weight.data = torch.cat((self.weight.data, faninweights), dim=0)
             if self.masked:
                 self.masktensor.data = torch.cat((self.masktensor.data, torch.ones(fanin, self.in_features)), dim=0)
