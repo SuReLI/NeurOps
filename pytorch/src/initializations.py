@@ -1,5 +1,5 @@
 import torch
-import torch.nn as nn
+import torch.nn
 
 def kaiming_uniform(tensor: torch.Tensor, a: float = 0, mode: str = 'fan_in', nonlinearity: str = 'leaky_relu', fan: int = -1):
     if fan == -1:
