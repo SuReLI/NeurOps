@@ -7,12 +7,12 @@ from . import initializations
     A modifiable version of Conv2D that can increase or decrease channel count and/or be masked/
 """
 class ModLinear(nn.Linear):
-    def __init__(self, in_features: int, out_features: int, bias: bool = True, masked: bool = False):
+    def __init__(self, in_features: int, out_features: int, bias: bool = True, masked: bool = False, learnablemask: bool = False):
         super().__init__(in_features, out_features, bias)
         self.masked = masked
         if masked:
-            self.masktensor = Parameter(torch.ones(self.out_features, self.in_features))
-            self.maskvector = Parameter(torch.ones(self.out_features))
+            self.masktensor = Parameter(torch.ones(self.out_features, self.in_features), requires_grad=learnablemask)
+            self.maskvector = Parameter(torch.ones(self.out_features), requires_grad=learnablemask)
 
     def forward(self, x: torch.Tensor):
         return nn.functional.linear(x, self.masktensor * self.weight if self.masked else self.weight, self.maskvector * self.bias if self.masked else self.bias)
@@ -56,28 +56,35 @@ class ModLinear(nn.Linear):
 
         fanouttokeep = range(self.in_features)
         fanouttokeep = [fotk for fotk in fanouttokeep if fotk not in fanouttoprune]
-        
-        if optimizer is not None:
-            for group in optimizer.param_groups:
-                for p in group['params']:
-                    if p is self.weight:
-                        p.data = p.data[fanintokeep, :][:, fanouttokeep]
-                        for (_,v) in optimizer.state[p]:
-                            if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
-                                v.data = v.data[fanintokeep, :][:, fanouttokeep]
-                    if self.bias is not None and p is self.bias:
-                        p.data = p.data[fanintokeep]
-                        for (_,v) in optimizer.state[p]:
-                            if isinstance(v, torch.Tensor) and v.shape == self.bias.shape:
-                                v.data = v.data[fanintokeep]
 
         if self.masked:
             self.masktensor.data = self.masktensor.data[fanintokeep, :][:, fanouttokeep]
             self.maskvector.data = self.maskvector.data[fanintokeep]
 
-        self.weight.data = self.weight.data[fanintokeep, :][:, fanouttokeep]
+        with torch.no_grad():
+            newweight = Parameter(self.weight[fanintokeep, :][:, fanouttokeep])
+            if self.bias is not None:
+                newbias = Parameter(self.bias[fanintokeep])
+        
+        if optimizer is not None:
+            for group in optimizer.param_groups:
+                for (i,param) in enumerate(group['params']):
+                    if param is self.weight: 
+                        for (_,v) in optimizer.state[param].items():
+                            if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
+                                v.data = v.data[fanintokeep, :][:, fanouttokeep]
+                        optimizer.state[newweight] = optimizer.state[param]
+                        group['params'][i] = newweight
+                    if self.bias is not None and param is self.bias:
+                        for (_,v) in optimizer.state[param].items():
+                            if isinstance(v, torch.Tensor) and v.shape == self.bias.shape:
+                                v.data = v.data[fanintokeep]
+                        optimizer.state[newbias] = optimizer.state[param]
+                        group['params'][i] = newbias
+
+        self.weight = newweight
         if self.bias is not None:
-            self.bias.data = self.bias.data[fanintokeep]
+            self.bias = newbias
 
         self.out_features = len(fanintokeep)
         self.in_features = len(fanouttokeep)
@@ -97,6 +104,7 @@ class ModLinear(nn.Linear):
         fanout: number of inputs to add to this layer
         faninweights: weights of the new neurons
         fanoutweights: weights of the new inputs (neurons of previous layer)
+        optimizer: optimizer to update to new shape of the layer
     """
     def grow(self, fanin = 0, fanout = 0, faninweights = None, fanoutweights = None, optimizer = None):
         if fanout > 0:
@@ -105,16 +113,20 @@ class ModLinear(nn.Linear):
             if len(fanoutweights.shape) == 1:
                 fanoutweights = fanoutweights.unsqueeze(0)
 
+            with torch.no_grad():
+                newweight = Parameter(torch.cat((self.weight.data, fanoutweights), dim=1))
+
             if optimizer is not None:
                 for group in optimizer.param_groups:
-                    for p in group['params']:
-                        if p is self.weight:
-                            p.data = torch.cat((p.data, fanoutweights), dim=1)
-                            for (_,v) in optimizer.state[p]:
+                    for (i,param) in enumerate(group['params']):
+                        if param is self.weight: # note: p will automatically be updated in optimizer.param_groups
+                            for (_,v) in optimizer.state[param].items():
                                 if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
                                     v.data = torch.cat((v.data, torch.zeros_like(fanoutweights)), dim=1)
+                            optimizer.state[newweight] = optimizer.state[param]
+                            group['params'][i] = newweight
 
-            self.weight.data = torch.cat((self.weight.data, fanoutweights), dim=1)
+            self.weight = newweight
             if self.masked:
                 self.masktensor.data = torch.cat((self.masktensor.data, torch.ones(self.out_features, fanout)), dim=1)
 
@@ -126,27 +138,33 @@ class ModLinear(nn.Linear):
             if len(faninweights.shape) == 1:
                 faninweights = faninweights.unsqueeze(1)   
 
+            with torch.no_grad():
+                newweight = Parameter(torch.cat((self.weight.data, faninweights), dim=0))
+                if self.bias is not None:
+                    newbias = Parameter(torch.cat((self.bias.data, torch.zeros(fanin))))
+
             if optimizer is not None:
                 for group in optimizer.param_groups:
-                    for p in group['params']:
-                        if p is self.weight:
-                            p.data = torch.cat((p.data, faninweights), dim=0)
-                            for (_,v) in optimizer.state[p]:
+                    for (i,param) in enumerate(group['params']):
+                        if param is self.weight:
+                            for (_,v) in optimizer.state[param].items():
                                 if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
                                     v.data = torch.cat((v.data, torch.zeros_like(faninweights)), dim=0)
-                        if self.bias is not None and p is self.bias:
-                            p.data = torch.cat((p.data, torch.zeros(fanin)))
-                            for (_,v) in optimizer.state[p]:
+                            optimizer.state[newweight] = optimizer.state[param]
+                            group['params'][i] = newweight
+                        if self.bias is not None and param is self.bias:
+                            for (_,v) in optimizer.state[param].items():
                                 if isinstance(v, torch.Tensor) and v.shape == self.bias.shape:
                                     v.data = torch.cat((v.data, torch.zeros(fanin)))
+                            optimizer.state[newbias] = optimizer.state[param]
+                            group['params'][i] = newbias
 
-            self.weight.data = torch.cat((self.weight.data, faninweights), dim=0)
+            self.weight = newweight
+            if self.bias is not None:
+                self.bias = newbias
             if self.masked:
                 self.masktensor.data = torch.cat((self.masktensor.data, torch.ones(fanin, self.in_features)), dim=0)
                 self.maskvector.data = torch.cat((self.maskvector.data, torch.ones(fanin)))
-
-            if self.bias is not None:
-                self.bias.data = torch.cat((self.bias.data, torch.zeros(fanin)))
 
             self.out_features = self.out_features + fanin
 
@@ -155,12 +173,12 @@ class ModLinear(nn.Linear):
     A modifiable version of Conv2D that can increase or decrease channel count and/or be masked/
 """
 class ModConv2d(nn.Conv2d):
-    def __init__(self, masked: bool = False, *args, **kwargs):
+    def __init__(self, masked: bool = False, learnablemask: bool = False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.masked = masked
         if masked:
-            self.masktensor = Parameter(torch.ones(self.out_channels, self.in_channels, self.kernel_size[0], self.kernel_size[1]))
-            self.maskvector = Parameter(torch.ones(self.out_channels))
+            self.masktensor = Parameter(torch.ones(self.out_channels, self.in_channels, self.kernel_size[0], self.kernel_size[1]), requires_grad=learnablemask)
+            self.maskvector = Parameter(torch.ones(self.out_channels), requires_grad=learnablemask)
 
     def forward(self, x):
         # TODO expand mask to kernel dimensions?
@@ -197,19 +215,41 @@ class ModConv2d(nn.Conv2d):
         fanintoprune: list of channels to remove from this layer
         fanouttoprune: list of channels to remove from previous layer
     """
-    def prune(self, fanintoprune = [], fanouttoprune = []):
+    def prune(self, fanintoprune = [], fanouttoprune = [], optimizer = None):
         fanintokeep = range(self.out_channels)
         fanintokeep = [fitk for fitk in fanintokeep if fitk not in fanintoprune]
 
         fanouttokeep = range(self.in_channels)
         fanouttokeep = [fotk for fotk in fanouttokeep if fotk not in fanouttoprune]
 
+        with torch.no_grad():
+            newweight = Parameter(self.weight[fanintokeep, :][:, fanouttokeep])
+            if self.bias is not None:
+                newbias = Parameter(self.bias[fanintokeep])
+        
+        if optimizer is not None:
+            for group in optimizer.param_groups:
+                for (i,param) in enumerate(group['params']):
+                    if param is self.weight: 
+                        for (_,v) in optimizer.state[param].items():
+                            if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
+                                v.data = v.data[fanintokeep, :][:, fanouttokeep]
+                        optimizer.state[newweight] = optimizer.state[param]
+                        group['params'][i] = newweight
+                    if self.bias is not None and param is self.bias:
+                        for (_,v) in optimizer.state[param].items():
+                            if isinstance(v, torch.Tensor) and v.shape == self.bias.shape:
+                                v.data = v.data[fanintokeep]
+                        optimizer.state[newbias] = optimizer.state[param]
+                        group['params'][i] = newbias
+
+        self.weight = newweight
+        if self.bias is not None:
+            self.bias = newbias
+
         if self.masked:
             self.masktensor.data = self.masktensor.data[fanintokeep, :][:, fanouttokeep]
             self.maskvector.data = self.maskvector.data[fanintokeep]
-        self.weight.data = self.weight.data[fanintokeep, :][:, fanouttokeep]
-        if self.bias is not None:
-            self.bias.data = self.bias.data[fanintokeep]
 
         self.out_channels = len(fanintokeep)
         self.in_channels = len(fanouttokeep)
@@ -228,7 +268,7 @@ class ModConv2d(nn.Conv2d):
         faninweights: weights of the new channels
         fanoutweights: weights of the new inputs (channels of previous layer)
     """
-    def grow(self, fanin = 0, fanout = 0, faninweights = None, fanoutweights = None):
+    def grow(self, fanin = 0, fanout = 0, faninweights = None, fanoutweights = None, optimizer = None):
         if fanout > 0:
             if fanoutweights is None:
                 fanoutweights = torch.zeros(self.out_channels, fanout, self.kernel_size[0], self.kernel_size[1])
@@ -236,7 +276,21 @@ class ModConv2d(nn.Conv2d):
                 fanoutweights = torch.reshape(fanoutweights, (self.out_channels, fanout, self.kernel_size[0], self.kernel_size[1]))
             if len(fanoutweights.shape) == 3:
                 fanoutweights = fanoutweights.unsqueeze(0)
-            self.weight.data = torch.cat((self.weight.data, fanoutweights), dim=1)
+
+            with torch.no_grad():
+                newweight = Parameter(torch.cat((self.weight.data, fanoutweights), dim=1))
+
+            if optimizer is not None:
+                for group in optimizer.param_groups:
+                    for (i,param) in enumerate(group['params']):
+                        if param is self.weight: # note: p will automatically be updated in optimizer.param_groups
+                            for (_,v) in optimizer.state[param].items():
+                                if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
+                                    v.data = torch.cat((v.data, torch.zeros_like(fanoutweights)), dim=1)
+                            optimizer.state[newweight] = optimizer.state[param]
+                            group['params'][i] = newweight
+
+            self.weight = newweight
             if self.masked:
                 self.masktensor.data = torch.cat((self.masktensor, torch.ones(self.out_channels, fanout, self.kernel_size[0], self.kernel_size[1])), dim=1)
         
@@ -249,13 +303,33 @@ class ModConv2d(nn.Conv2d):
                 faninweights = torch.reshape(faninweights, (fanin, self.in_channels, self.kernel_size[0], self.kernel_size[1]))
             if len(faninweights.shape) == 3:
                 faninweights = faninweights.unsqueeze(1)
-            self.weight.data = torch.cat((self.weight.data, faninweights), dim=0)
+
+            newweight = nn.Parameter(torch.cat((self.weight.data, faninweights), dim=0))
+            if self.bias is not None:
+                newbias = nn.Parameter(torch.cat((self.bias.data, torch.zeros(fanin)), dim=0))
+
+            if optimizer is not None:
+                for group in optimizer.param_groups:
+                    for (i,param) in enumerate(group['params']):
+                        if param is self.weight:
+                            for (_,v) in optimizer.state[param].items():
+                                if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
+                                    v.data = torch.cat((v.data, torch.zeros_like(faninweights)), dim=0)
+                            optimizer.state[newweight] = optimizer.state[param]
+                            group['params'][i] = newweight
+                        if self.bias is not None and param is self.bias:
+                            for (_,v) in optimizer.state[param].items():
+                                if isinstance(v, torch.Tensor) and v.shape == self.bias.shape:
+                                    v.data = torch.cat((v.data, torch.zeros(fanin)))
+                            optimizer.state[newbias] = optimizer.state[param]
+                            group['params'][i] = newbias
+
+            self.weight = newweight
+            if self.bias is not None:
+                self.bias = newbias
             if self.masked:
                 self.masktensor.data = torch.cat((self.masktensor, torch.ones(fanin, self.in_channels, self.kernel_size[0], self.kernel_size[1])), dim=0)
                 self.maskvector.data = torch.cat((self.maskvector, torch.ones(fanin)))
-
-            if self.bias is not None:
-                self.bias.data = torch.cat((self.bias.data, torch.zeros(fanin)))
 
             self.out_channels = self.out_channels + fanin
 

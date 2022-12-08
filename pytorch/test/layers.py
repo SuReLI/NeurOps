@@ -103,12 +103,92 @@ class TestLayers(unittest.TestCase):
         newprunedout = layer(torch.cat((data[:,0:1,:,:],data[:,2:,:,:]), dim=1))
         self.assertTrue(torch.allclose(newprunedout, newmaskedout))
 
+    def test_optimizer(self):
+        data = [torch.randn(8, 6) for _ in range(5)] 
+        labels = [torch.randn(8, 2) for _ in range(5)]
+        layer = ModLinear(6, 4, masked=True)
+        layer2 = ModLinear(4, 2, masked=True)
+        model = nn.Sequential(layer, torch.nn.ReLU(), layer2)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.1)
+        lossfunction = nn.CrossEntropyLoss()
 
+        out = model(data[0])
+        self.assertTrue(out.shape == torch.Size([8, 2]))
 
+        layer.mask([0, 1])
+        layer2.mask([],[0, 1])
+        for batch, label in zip(data, labels):
+            optimizer.zero_grad()
+            maskedout = model(batch)
+            loss = lossfunction(maskedout, label)
+            loss.backward()
+            optimizer.step()
 
+        layer.prune([2], optimizer=optimizer)
+        layer2.prune([],[2], optimizer=optimizer)
+        self.assertEqual(layer.weight.shape, torch.Size([3, 6]))
+        self.assertEqual(layer.bias.shape, torch.Size([3]))
+        self.assertTrue(layer.weight in optimizer.param_groups[0]['params'])
+        self.assertTrue(len(optimizer.state[layer.weight]) != 0)
+
+        for batch, label in zip(data, labels):
+            optimizer.zero_grad()
+            maskedout = model(batch)
+            loss = lossfunction(maskedout, label)
+            loss.backward()
+            optimizer.step()
+
+        layer.grow(2, optimizer=optimizer)
+        layer2.grow(0, 2, optimizer=optimizer)
+        self.assertEqual(layer.weight.shape, torch.Size([5, 6]))
+        self.assertEqual(layer.bias.shape, torch.Size([5]))
+        self.assertTrue(layer.weight in optimizer.param_groups[0]['params'])
+        self.assertTrue(len(optimizer.state[layer.weight]) != 0)
+
+        data = [torch.randn(8, 4, 4, 4) for _ in range(5)]
+        labels = [torch.randn(8, 1, 1, 1) for _ in range(5)]
+        layer = ModConv2d(masked=True, in_channels=4, out_channels=6, kernel_size=3)
+        layer2 = ModConv2d(masked=True, in_channels=6, out_channels=1, kernel_size=2)
+        model = nn.Sequential(layer, torch.nn.ReLU(), layer2) 
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        lossfunction = nn.CrossEntropyLoss()
+
+        out = model(data[0])
+        self.assertTrue(out.shape == torch.Size([8, 1, 1, 1]))
+
+        layer.mask([0, 1])
+        layer2.mask([],[0, 1])
+        for batch, label in zip(data, labels):
+            optimizer.zero_grad()
+            maskedout = model(batch)
+            loss = lossfunction(maskedout, label)
+            loss.backward()
+            optimizer.step()
+
+        layer.prune([2], optimizer=optimizer)
+        layer2.prune([],[2], optimizer=optimizer)
+        self.assertEqual(layer.weight.shape, torch.Size([5, 4, 3, 3]))
+        self.assertEqual(layer.bias.shape, torch.Size([5]))
+        self.assertTrue(layer.weight in optimizer.param_groups[0]['params'])
+        self.assertTrue(len(optimizer.state[layer.weight]) != 0)
+
+        for batch, label in zip(data, labels):
+            optimizer.zero_grad()
+            maskedout = model(batch)
+            loss = lossfunction(maskedout, label)
+            loss.backward()
+            optimizer.step()
         
+        layer.grow(2, optimizer=optimizer)
+        layer2.grow(0, 2, optimizer=optimizer)
+        self.assertEqual(layer.weight.shape, torch.Size([7, 4, 3, 3]))
+        self.assertEqual(layer.bias.shape, torch.Size([7]))
+        self.assertTrue(layer.weight in optimizer.param_groups[0]['params'])
+        self.assertTrue(len(optimizer.state[layer.weight]) != 0)
 
 
-    
+
+
+
 if __name__ == '__main__':
     unittest.main()
