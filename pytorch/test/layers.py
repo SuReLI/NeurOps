@@ -9,7 +9,7 @@ print("test")
 class TestLayers(unittest.TestCase):
     def test_linear(self):
         data = torch.randn(6)
-        layer = ModLinear(6, 4, masked=True)
+        layer = ModLinear(6, 4, masked=True, nonlinearity='')
 
         out = layer(data)
         self.assertTrue(out.shape == torch.Size([4]))
@@ -185,6 +185,71 @@ class TestLayers(unittest.TestCase):
         self.assertEqual(layer.bias.shape, torch.Size([7]))
         self.assertTrue(layer.weight in optimizer.param_groups[0]['params'])
         self.assertTrue(len(optimizer.state[layer.weight]) != 0)
+
+    def test_batchnorm(self):
+        layer = ModLinear(6, 4, masked=True, prebatchnorm=True)
+
+        data = torch.randn(8, 6)
+        out = layer(data)
+        self.assertTrue(out.shape == torch.Size([8, 4]))
+        self.assertFalse(torch.allclose(layer.batchnorm.running_mean, torch.zeros(6)))
+        self.assertFalse(torch.allclose(layer.batchnorm.running_var, torch.ones(6)))
+
+        layer.mask([1, 2])
+        maskedout = layer(data)
+        self.assertTrue(maskedout.shape == torch.Size([8, 4]))
+        self.assertTrue(torch.allclose(maskedout[:, 1:3], torch.zeros(8, 2)))
+
+        layer.mask([], [1])
+        masked2out = layer(data)
+        self.assertTrue(masked2out.shape == torch.Size([8, 4]))
+
+        layer.unmask([2], [1])
+        self.assertTrue(torch.allclose(layer.batchnorm.running_mean[1], torch.zeros(1)))
+        self.assertTrue(torch.allclose(layer.batchnorm.running_var[1], torch.ones(1)))
+        unmaskedout = layer(data)
+        self.assertTrue(unmaskedout.shape == torch.Size([8, 4]))
+        rm = layer.batchnorm.running_mean
+
+        layer.prune([], [0])
+        self.assertTrue(torch.allclose(layer.batchnorm.running_mean, rm[1:]))
+
+        layer.grow(0, 1)
+        self.assertTrue(torch.allclose(layer.batchnorm.running_mean[:-1], rm[1:]))
+        self.assertTrue(torch.allclose(layer.batchnorm.running_mean[-1], torch.zeros(1)))
+
+        layer = ModConv2d(in_channels = 6, out_channels = 4, kernel_size = 3, masked=True, prebatchnorm=True)
+        data = torch.randn(8, 6, 4, 4)
+
+        out = layer(data)
+        self.assertTrue(out.shape == torch.Size([8, 4, 2, 2]))
+        self.assertFalse(torch.allclose(layer.batchnorm.running_mean, torch.zeros(6)))
+        self.assertFalse(torch.allclose(layer.batchnorm.running_var, torch.ones(6)))
+
+        layer.mask([1, 2])
+        maskedout = layer(data)
+        self.assertTrue(maskedout.shape == torch.Size([8, 4, 2, 2]))
+        self.assertTrue(torch.allclose(maskedout[:, 1:3], torch.zeros(8, 2, 2, 2)))
+
+        layer.mask([], [1])
+        masked2out = layer(data)
+        self.assertTrue(masked2out.shape == torch.Size([8, 4, 2, 2]))
+
+        layer.unmask([2], [1])
+        self.assertTrue(torch.allclose(layer.batchnorm.running_mean[1], torch.zeros(1)))
+        self.assertTrue(torch.allclose(layer.batchnorm.running_var[1], torch.ones(1)))
+        unmaskedout = layer(data)
+        self.assertTrue(unmaskedout.shape == torch.Size([8, 4, 2, 2]))
+        rm = layer.batchnorm.running_mean
+
+        layer.prune([], [0])
+        self.assertTrue(torch.allclose(layer.batchnorm.running_mean, rm[1:]))
+
+        layer.grow(0, 1)
+        self.assertTrue(torch.allclose(layer.batchnorm.running_mean[:-1], rm[1:]))
+        self.assertTrue(torch.allclose(layer.batchnorm.running_mean[-1], torch.zeros(1)))
+
+
 
 
 
