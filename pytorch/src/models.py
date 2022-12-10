@@ -7,12 +7,14 @@ from collections import defaultdict
 import layers
 
 class ModSequential(nn.Sequential):
-    def __init__(self, trackacts: bool = False, *args):
+    def __init__(self,  *args, trackacts: bool = False):
         super(ModSequential, self).__init__(*args)
-        self.activations = defaultdict(torch.Tensor)
-        for name, module in self.named_modules():
-            if isinstance(module, layers.ModLinear) or isinstance(module, layers.ModConv2d):
-                module.register_forward_hook(partial(self._hook, name))
+        self.trackacts = trackacts
+        if self.trackacts:
+            self.activations = defaultdict(torch.Tensor)
+            for name, module in self.named_modules():
+                if isinstance(module, layers.ModLinear) or isinstance(module, layers.ModConv2d):
+                    module.register_forward_hook(partial(self._hook, name))
 
     def _hook(self, name, module, input, output):
         self.activations[name] = torch.cat((self.activations[name], output.detach()), dim=0)
@@ -30,7 +32,7 @@ class ModSequential(nn.Sequential):
                 module.mask(neurons, [])
             elif i == layerindex+1 and (isinstance(module, layers.ModLinear) or isinstance(module, layers.ModConv2d)):
                 module.mask([], neurons)
-        if clearacts:
+        if clearacts and self.trackacts:
             for index in (layerindex+1, layerindex):
                 self.activations[str(index)] = torch.Tensor()
 
@@ -41,7 +43,7 @@ class ModSequential(nn.Sequential):
                 module.mask(neurons, [])
             elif i == layerindex+1 and (isinstance(module, layers.ModLinear) or isinstance(module, layers.ModConv2d)):
                 module.mask([], neurons)
-        if clearacts:
+        if clearacts and self.trackacts:
             for index in (layerindex+1, layerindex):
                 self.activations[str(index)] = torch.Tensor()
             
@@ -53,9 +55,9 @@ class ModSequential(nn.Sequential):
             elif i == layerindex+1 and (isinstance(module, layers.ModLinear) or isinstance(module, layers.ModConv2d)):
                 module.prune([], neurons, optimizer=optimizer)
         for index in (layerindex+1, layerindex):
-            if clearacts:
+            if clearacts and self.trackacts:
                 self.activations[str(index)] = torch.Tensor()
-            elif index == layerindex:
+            elif index == layerindex and self.trackacts and len(self.activations[str(index)].shape) >= 2:
                 neuronstokeep = range(self.activations[str(index)].shape[1])
                 neuronstokeep = [
                     ntk for ntk in neurons if ntk not in neurons]
@@ -69,9 +71,9 @@ class ModSequential(nn.Sequential):
             elif i == layerindex+1 and (isinstance(module, layers.ModLinear) or isinstance(module, layers.ModConv2d)):
                 module.grow(0, newneurons, fanoutweights, optimizer=optimizer)
         for index in (layerindex+1, layerindex):
-            if clearacts:
+            if clearacts and self.trackacts:
                 self.activations[str(index)] = torch.Tensor()
-            elif index == layerindex:
+            elif index == layerindex and self.trackacts:
                 self.activations[str(index)] = torch.cat(
                     (self.activations[str(index)], torch.zeros(
                         self.activations[str(index)].shape[0], newneurons)), dim=1)
