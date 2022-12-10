@@ -3,7 +3,6 @@ import torch
 import sys
 sys.path.append('.')
 from pytorch.src.layers import *
-print("test")
 
 
 class TestLayers(unittest.TestCase):
