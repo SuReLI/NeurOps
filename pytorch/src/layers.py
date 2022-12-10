@@ -47,9 +47,12 @@ class ModLinear(nn.Linear):
     """
 
     def mask(self, fanin=[], fanout=[]):
-        self.masktensor.data[fanin, :] = 0
-        self.maskvector.data[fanin] = 0
-        self.masktensor.data[:, fanout] = 0
+        if self.masked:
+            self.masktensor.data[fanin, :] = 0
+            self.maskvector.data[fanin] = 0
+            self.masktensor.data[:, fanout] = 0
+        else:
+            print("No mask found")
 
     """
         Unmask fanin weights of neurons of this layer that have indices in fanin and fanout weights 
@@ -60,16 +63,19 @@ class ModLinear(nn.Linear):
     """
 
     def unmask(self, fanin=[], fanout=[]):
-        self.masktensor.data[fanin, :] = 1
-        self.maskvector.data[fanin] = 1
-        self.masktensor.data[:, fanout] = 1
-        if not isinstance(self.batchnorm, nn.Identity):
-            if self.batchnorm.running_mean is not None:
-                self.batchnorm.running_mean[fanout] = 0
-                self.batchnorm.running_var[fanout] = 1
-            if self.batchnorm.weight is not None:
-                self.batchnorm.weight.data[fanout] = 1
-                self.batchnorm.bias.data[fanout] = 0
+        if self.masked:
+            self.masktensor.data[fanin, :] = 1
+            self.maskvector.data[fanin] = 1
+            self.masktensor.data[:, fanout] = 1
+            if not isinstance(self.batchnorm, nn.Identity):
+                if self.batchnorm.running_mean is not None:
+                    self.batchnorm.running_mean[fanout] = 0
+                    self.batchnorm.running_var[fanout] = 1
+                if self.batchnorm.weight is not None:
+                    self.batchnorm.weight.data[fanout] = 1
+                    self.batchnorm.bias.data[fanout] = 0  
+        else:
+            print("No mask found")  
 
     """
         Remove fanin weights of neurons (of this layer) in list fanintoprune from the layer, and 
