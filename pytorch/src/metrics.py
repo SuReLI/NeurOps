@@ -17,5 +17,5 @@ def effectivesvd(layer: nn.Module = None, tensor: torch.Tensor = None, threshold
     _, S, _ = torch.svd(tensor)
     effdim = torch.count_nonzero(S > threshold)
     if partial:
-        effdim += torch.sum(S)
+        effdim = effdim.float() + torch.sum(S)
     return effdim
