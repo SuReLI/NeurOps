@@ -32,6 +32,12 @@ class ModLinear(nn.Linear):
             self.batchnorm = nn.BatchNorm1d(self.in_features)
         else:
             self.batchnorm = nn.Identity()
+    
+    def weightparameters(self):
+        if self.bias is not None:
+            return [self.weight, self.bias]
+        else:
+            return [self.weight]
 
     def forward(self, x: torch.Tensor):
         return self.nonlinearity(nn.functional.linear(self.batchnorm(x), self.masktensor * self.weight if self.masked else self.weight,
@@ -301,6 +307,12 @@ class ModConv2d(nn.Conv2d):
         else:
             self.batchnorm = nn.Identity()
 
+    def weightparameters(self):
+        if self.bias is not None:
+            return [self.weight, self.bias]
+        else:
+            return [self.weight]
+            
     def forward(self, x):
         # TODO expand mask to kernel dimensions?
         return self.nonlinearity(nn.functional.conv2d(self.batchnorm(x), self.masktensor * self.weight if self.masked else self.weight,
