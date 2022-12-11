@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from torch.nn.parameter import Parameter
-from . import initializations
 
 """
     A modifiable version of Conv2D that can increase or decrease channel count and/or be masked/

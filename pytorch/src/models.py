@@ -4,7 +4,7 @@ import torch.nn as nn
 from functools import partial
 from collections import defaultdict
 
-import layers
+from .layers import ModLinear, ModConv2d
 
 class ModSequential(nn.Sequential):
     def __init__(self,  *args, trackacts: bool = False):
