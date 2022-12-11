@@ -26,6 +26,13 @@ class ModSequential(nn.Sequential):
             x = module(x)
         return x
 
+    def limitedforward(self, x, layerindex: int):
+        for i, module in enumerate(self._modules.values()):
+            x = module(x)
+            if i == layerindex:
+                return x
+        return x
+
     def mask(self, layerindex: int, neurons: list = [], clearacts: bool = False):
         for i, module in enumerate(self._modules.values()):
             if i == layerindex and (isinstance(module, layers.ModLinear) or isinstance(module, layers.ModConv2d)):
