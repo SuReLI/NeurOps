@@ -48,8 +48,22 @@ def effectivesvd(tensor: torch.Tensor = None, threshold: float = 0.01,
     return effdim
 
 """
+Measure orthogonality gap of activations
+Used by Daneshmand et al. (2021)
+"""
+def orthogonalitygap(acts: torch.Tensor = None):
+    if acts is None:
+        return None
+    if len(acts.shape) > 2:
+       acts = acts.reshape(acts.shape[0], -1)
+    cov = acts @ acts.t()
+    return torch.norm(cov*torch.trace(cov) - torch.eye(acts.shape[0]).to(cov.device)/acts.shape[0], p='fro')
+
+
+"""
 Measure effective rank per neuron when that neuron is left out of the 
 computation
+Used by Maile et al. (2022) for selection of neurogenesis initialization candidates
 """
 def svdscore(tensor: torch.Tensor = None, threshold: float = 0.01, addwhole: bool = False, 
              scale: bool = True):
@@ -68,3 +82,34 @@ def svdscore(tensor: torch.Tensor = None, threshold: float = 0.01, addwhole: boo
             effdim += torch.count_nonzero(S > threshold).float()
         scores[neuron] = effdim
     return scores
+
+"""
+Measure nuclear norm (sum of singular values) of activations per neuron when that neuron is left out
+of the computation
+Average version used by Sui et al. (2021) for channel pruning
+"""
+def nucscore(activations: torch.Tensor = None, average: bool = False):
+    if activations is None:
+        return None
+    scores = torch.zeros(activations.shape[1])
+    if average and len(activations.shape) > 2:
+        activations = activations.reshape(activations.shape[0], activations.shape[1], -1) 
+    for neuron in range(activations.shape[1]):
+        prunedacts = torch.cat((activations[:, :neuron], activations[:, neuron+1:]), dim=1)
+        if not average: 
+            if len(prunedacts.shape) > 2:
+                prunedacts = prunedacts.reshape(activations.shape[0], -1)
+            scores[neuron] = torch.norm(prunedacts, p='nuc')
+        else:
+            scores[neuron] = torch.mean(torch.norm(prunedacts, p='nuc', dim=(1,2)))
+    return scores
+
+"""
+Measure fisher information of mask gradients: assume 0th dim is batch dim and rest are weight dims
+
+Used by Kwon et al. (2022)
+"""
+def fisherinfo(maskgrads: torch.Tensor = None):
+    if maskgrads is None:
+        return None
+    return maskgrads.pow(2).sum(dim=0)
