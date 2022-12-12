@@ -10,7 +10,7 @@ def effectivesvd(tensor: torch.Tensor = None, threshold: float = 0.01, partial: 
     if len(tensor.shape) > 2:
         tensor = tensor.reshape(tensor.shape[0], -1) #TODO: check if this is correct for acts and weights
     if scale:
-        tensor /= tensor.shape[1]**0.5
+        tensor = tensor.clone() / tensor.shape[1]**0.5
     _, S, _ = torch.svd(tensor, compute_uv=False)
     effdim = torch.count_nonzero(S > threshold)
     if partial:
