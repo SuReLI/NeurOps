@@ -2,9 +2,39 @@ import torch
 import torch.nn as nn
 
 """
-Measure effective rank via thresholding singular values of activations (or weights)
+Measure l1 or l2 (etc.) sum of weights for each neuron in a layer
+L1 sum of weights is used by Li et al (2019) to measure neuron importance
+
+weights: weights of a layer
+p: p-norm to use (int, inf, -inf, "fro", "nuc")
+fanin: whether to measure w.r.t. fan-in or fan-out weights
 """
-def effectivesvd(tensor: torch.Tensor = None, threshold: float = 0.01, partial: bool = False, scale: bool = True):
+def weightsum(weights: torch.Tensor = None, p = 1, fanin: bool = True):
+    if weights is None:
+        return None
+    if not fanin:
+        weights = weights.t()
+    if len(weights.shape) > 2:
+        weights = weights.reshape(weights.shape[0], -1)
+    return torch.norm(weights, p=p, dim=0)
+
+"""
+Measure variance of activations for each neuron in a layer, used by Polyak 
+and Wolf (2015) to measure neuron importance
+"""
+def actvar(acts: torch.Tensor = None):
+    if acts is None:
+        return None
+    if len(acts.shape) > 2:
+        acts = acts.reshape(acts.shape[0], -1)
+    return torch.var(acts, dim=0)
+
+"""
+Measure effective rank of whole layer via thresholding singular values of 
+activations (or weights)
+"""
+def effectivesvd(tensor: torch.Tensor = None, threshold: float = 0.01, 
+                 partial: bool = False, scale: bool = True):
     if tensor is None:
         return None
     if len(tensor.shape) > 2:
@@ -18,9 +48,25 @@ def effectivesvd(tensor: torch.Tensor = None, threshold: float = 0.01, partial: 
     return effdim
 
 """
-Measure effective rank when each neuron is left out of the computation
+Measure orthogonality gap of activations
+Used by Daneshmand et al. (2021)
 """
-def svdscore(tensor: torch.Tensor = None, threshold: float = 0.01, addwhole: bool = False, scale: bool = True):
+def orthogonalitygap(acts: torch.Tensor = None):
+    if acts is None:
+        return None
+    if len(acts.shape) > 2:
+       acts = acts.reshape(acts.shape[0], -1)
+    cov = acts @ acts.t()
+    return torch.norm(cov*torch.trace(cov) - torch.eye(acts.shape[0]).to(cov.device)/acts.shape[0], p='fro')
+
+
+"""
+Measure effective rank per neuron when that neuron is left out of the 
+computation
+Used by Maile et al. (2022) for selection of neurogenesis initialization candidates
+"""
+def svdscore(tensor: torch.Tensor = None, threshold: float = 0.01, addwhole: bool = False, 
+             scale: bool = True):
     if tensor is None:
         return None
     scores = torch.zeros(tensor.shape[1])
@@ -36,3 +82,34 @@ def svdscore(tensor: torch.Tensor = None, threshold: float = 0.01, addwhole: boo
             effdim += torch.count_nonzero(S > threshold).float()
         scores[neuron] = effdim
     return scores
+
+"""
+Measure nuclear norm (sum of singular values) of activations per neuron when that neuron is left out
+of the computation
+Average version used by Sui et al. (2021) for channel pruning
+"""
+def nucscore(activations: torch.Tensor = None, average: bool = False):
+    if activations is None:
+        return None
+    scores = torch.zeros(activations.shape[1])
+    if average and len(activations.shape) > 2:
+        activations = activations.reshape(activations.shape[0], activations.shape[1], -1) 
+    for neuron in range(activations.shape[1]):
+        prunedacts = torch.cat((activations[:, :neuron], activations[:, neuron+1:]), dim=1)
+        if not average: 
+            if len(prunedacts.shape) > 2:
+                prunedacts = prunedacts.reshape(activations.shape[0], -1)
+            scores[neuron] = torch.norm(prunedacts, p='nuc')
+        else:
+            scores[neuron] = torch.mean(torch.norm(prunedacts, p='nuc', dim=(1,2)))
+    return scores
+
+"""
+Measure fisher information of mask gradients: assume 0th dim is batch dim and rest are weight dims
+
+Used by Kwon et al. (2022)
+"""
+def fisherinfo(maskgrads: torch.Tensor = None):
+    if maskgrads is None:
+        return None
+    return maskgrads.pow(2).sum(dim=0)

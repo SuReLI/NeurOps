@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-def kaiming_uniform(tensor: torch.Tensor, a: float = 0, mode: str = 'fan_in', nonlinearity: str = 'leaky_relu', fan: int = -1):
+def kaiming_uniform(tensor: torch.Tensor, a: float = 5**(1/2), mode: str = 'fan_in', nonlinearity: str = 'leaky_relu', fan: int = -1):
     if fan == -1:
         fan = nn.init._calculate_correct_fan(tensor, mode)
     gain = nn.init.calculate_gain(nonlinearity, a)

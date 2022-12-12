@@ -12,6 +12,7 @@ class TestModels(unittest.TestCase):
             ModLinear(2, 3, masked=True),
             ModLinear(3, 4, masked=True),
             ModLinear(4, 5, masked=True),
+            trackacts=True
         )
         x = torch.randn(10, 2)
         y = model(x)

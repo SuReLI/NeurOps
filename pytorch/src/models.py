@@ -14,14 +14,14 @@ class ModSequential(nn.Sequential):
             self.activations = defaultdict(torch.Tensor)
             for name, module in self.named_modules():
                 if isinstance(module, ModLinear) or isinstance(module, ModConv2d):
-                    module.register_forward_hook(partial(self._hook, name))
+                    module.register_forward_hook(partial(self._acthook, name))
 
-    def _hook(self, name, module, input, output):
+    def _acthook(self, name, module, input, output):
         self.activations[name] = torch.cat((self.activations[name], output.detach()), dim=0)
         if self.activations[name].shape[0] > 2*self.activations[name].shape[1]:
             #self.activations[name] = self.activations[name][min(-2*self.activations[name].shape[1], output.shape[1]):]
             self.activations[name] = self.activations[name][-2*self.activations[name].shape[1]:]
-            
+    
     def forward(self, x):
         for module in self._modules.values():
             x = module(x)
@@ -72,7 +72,8 @@ class ModSequential(nn.Sequential):
                 self.activations[str(index)] = self.activations[str(index)][:, neuronstokeep]
 
 
-    def grow(self, layerindex: int, newneurons=0, faninweights=None, fanoutweights=None, optimizer=None, clearacts: bool = False):
+    def grow(self, layerindex: int, newneurons=0, faninweights=None, fanoutweights=None, 
+             optimizer=None, clearacts: bool = False):
         for i, module in enumerate(self._modules.values()):
             if i == layerindex and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.grow(newneurons, 0, faninweights, optimizer=optimizer)
@@ -83,6 +84,6 @@ class ModSequential(nn.Sequential):
                 self.activations[str(index)] = torch.Tensor()
             elif index == layerindex and self.trackacts:
                 self.activations[str(index)] = torch.cat(
-                    (self.activations[str(index)], torch.zeros(
-                        self.activations[str(index)].shape[0], newneurons)), dim=1)
+                    (self.activations[str(index)], 
+                     torch.zeros(self.activations[str(index)].shape[0], newneurons)), dim=1)
 
