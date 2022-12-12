@@ -2,9 +2,39 @@ import torch
 import torch.nn as nn
 
 """
-Measure effective rank via thresholding singular values of activations (or weights)
+Measure l1 or l2 (etc.) sum of weights for each neuron in a layer
+L1 sum of weights is used by Li et al (2019) to measure neuron importance
+
+weights: weights of a layer
+p: p-norm to use (int, inf, -inf, "fro", "nuc")
+fanin: whether to measure w.r.t. fan-in or fan-out weights
 """
-def effectivesvd(tensor: torch.Tensor = None, threshold: float = 0.01, partial: bool = False, scale: bool = True):
+def weightsum(weights: torch.Tensor = None, p = 1, fanin: bool = True):
+    if weights is None:
+        return None
+    if not fanin:
+        weights = weights.t()
+    if len(weights.shape) > 2:
+        weights = weights.reshape(weights.shape[0], -1)
+    return torch.norm(weights, p=p, dim=0)
+
+"""
+Measure variance of activations for each neuron in a layer, used by Polyak 
+and Wolf (2015) to measure neuron importance
+"""
+def actvar(acts: torch.Tensor = None):
+    if acts is None:
+        return None
+    if len(acts.shape) > 2:
+        acts = acts.reshape(acts.shape[0], -1)
+    return torch.var(acts, dim=0)
+
+"""
+Measure effective rank of whole layer via thresholding singular values of 
+activations (or weights)
+"""
+def effectivesvd(tensor: torch.Tensor = None, threshold: float = 0.01, 
+                 partial: bool = False, scale: bool = True):
     if tensor is None:
         return None
     if len(tensor.shape) > 2:
@@ -18,9 +48,11 @@ def effectivesvd(tensor: torch.Tensor = None, threshold: float = 0.01, partial: 
     return effdim
 
 """
-Measure effective rank when each neuron is left out of the computation
+Measure effective rank per neuron when that neuron is left out of the 
+computation
 """
-def svdscore(tensor: torch.Tensor = None, threshold: float = 0.01, addwhole: bool = False, scale: bool = True):
+def svdscore(tensor: torch.Tensor = None, threshold: float = 0.01, addwhole: bool = False, 
+             scale: bool = True):
     if tensor is None:
         return None
     scores = torch.zeros(tensor.shape[1])
