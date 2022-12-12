@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from torch.nn.parameter import Parameter
+from .initializations import kaiming_uniform
+
 
 """
     A modifiable version of Conv2D that can increase or decrease channel count and/or be masked/
@@ -167,10 +169,13 @@ class ModLinear(nn.Linear):
         If faninweights and/or fanoutweights are 1D tensors, they are expanded to 2D tensors
         with the appropriate number of neurons/inputs.
 
+        If faninweights and/or fanoutweights is "kaiming", they are initialized with the
+        Kaiming initialization.
+
         newoutfeatures: number of neurons to add to this layer
         newinfeatures: number of inputs to add to this layer
         faninweights: weights of the new neurons
-        fanoutweights: weights of the new inputs (neurons of previous layer)
+        fanoutweights: weights of the new inputs (adding neurons to the previous layer)
         optimizer: optimizer to update to new shape of the layer
     """
 
@@ -178,7 +183,9 @@ class ModLinear(nn.Linear):
         if newinfeatures > 0:
             if fanoutweights is None:
                 fanoutweights = torch.zeros(self.out_features, newinfeatures)
-            if len(fanoutweights.shape) == 1:
+            elif fanoutweights == "kaiming":
+                fanoutweights = kaiming_uniform(torch.zeros(self.out_features,self.in_features+newinfeatures))[:, :newinfeatures]
+            elif len(fanoutweights.shape) == 1:
                 fanoutweights = fanoutweights.unsqueeze(0)
 
             with torch.no_grad():
@@ -236,7 +243,9 @@ class ModLinear(nn.Linear):
         if newoutfeatures > 0:
             if faninweights is None:
                 faninweights = torch.zeros(newoutfeatures, self.in_features)
-            if len(faninweights.shape) == 1:
+            elif faninweights == "kaiming":
+                faninweights = kaiming_uniform(torch.zeros(newoutfeatures+self.out_features, self.in_features))[:newoutfeatures, :]
+            elif len(faninweights.shape) == 1:
                 faninweights = faninweights.unsqueeze(1)
 
             with torch.no_grad():
@@ -279,8 +288,6 @@ class ModLinear(nn.Linear):
 """
     A modifiable version of Conv2D that can increase or decrease channel count and/or be masked
 """
-
-
 class ModConv2d(nn.Conv2d):
     def __init__(self, masked: bool = False, bias: bool = True, learnablemask: bool = False, nonlinearity: str = 'relu',
                  prebatchnorm: bool = False, *args, **kwargs):
@@ -314,7 +321,6 @@ class ModConv2d(nn.Conv2d):
             return [self.weight]
             
     def forward(self, x):
-        # TODO expand mask to kernel dimensions?
         return self.nonlinearity(nn.functional.conv2d(self.batchnorm(x), self.masktensor * self.weight if self.masked else self.weight,
                                                       self.maskvector * self.bias if self.masked else self.bias, self.stride, self.padding,
                                                       self.dilation, self.groups))
@@ -448,10 +454,12 @@ class ModConv2d(nn.Conv2d):
             if fanoutweights is None:
                 fanoutweights = torch.zeros(
                     self.out_channels, newinchannels, self.kernel_size[0], self.kernel_size[1])
-            if len(fanoutweights.shape) == 1:
+            elif fanoutweights == "kaiming":
+                fanoutweights = kaiming_uniform(torch.zeros(self.out_channels,self.in_channels+newinchannels, self.kernel_size[0], self.kernel_size[1]))[:, :newinchannels]
+            elif len(fanoutweights.shape) == 1:
                 fanoutweights = torch.reshape(
                     fanoutweights, (self.out_channels, newinchannels, self.kernel_size[0], self.kernel_size[1]))
-            if len(fanoutweights.shape) == 3:
+            elif len(fanoutweights.shape) == 3:
                 fanoutweights = fanoutweights.unsqueeze(0)
 
             with torch.no_grad():
@@ -513,10 +521,13 @@ class ModConv2d(nn.Conv2d):
             if faninweights is None:
                 faninweights = torch.zeros(
                     newoutchannels, self.in_channels, self.kernel_size[0], self.kernel_size[1])
-            if len(faninweights.shape) == 1:
+            elif faninweights == "kaiming":
+                faninweights = kaiming_uniform(torch.zeros(newoutchannels+self.out_channels, self.in_channels, 
+                                                           self.kernel_size[0], self.kernel_size[1]))[:newoutchannels]
+            elif len(faninweights.shape) == 1:
                 faninweights = torch.reshape(
                     faninweights, (newoutchannels, self.in_channels, self.kernel_size[0], self.kernel_size[1]))
-            if len(faninweights.shape) == 3:
+            elif len(faninweights.shape) == 3:
                 faninweights = faninweights.unsqueeze(1)
 
             newweight = nn.Parameter(
