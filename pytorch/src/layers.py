@@ -5,7 +5,7 @@ from .initializations import kaiming_uniform
 
 
 """
-    A modifiable version of Conv2D that can increase or decrease channel count and/or be masked/
+    A modifiable version of Conv2D that can increase or decrease channel count and/or be masked
 """
 
 
@@ -295,6 +295,7 @@ class ModConv2d(nn.Conv2d):
         super().__init__(bias=bias, *args, **kwargs)
 
         self.masked = masked
+        self.learnablemask = learnablemask
 
         if masked:
             self.masktensor = Parameter(torch.ones(self.out_channels, self.in_channels,
