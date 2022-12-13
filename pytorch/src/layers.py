@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn.parameter import Parameter
-from .initializations import kaiming_uniform
+from .initializations import *
 
 
 """
@@ -179,13 +179,17 @@ class ModLinear(nn.Linear):
         optimizer: optimizer to update to new shape of the layer
     """
 
-    def grow(self, newoutfeatures=0, newinfeatures=0, faninweights=None, fanoutweights=None, optimizer=None):
+    def grow(self, newoutfeatures=0, newinfeatures=0, faninweights=None, fanoutweights=None, optimizer=None, activations=None):
         if newinfeatures > 0:
             if fanoutweights is None:
                 fanoutweights = torch.zeros(self.out_features, newinfeatures)
             elif fanoutweights == "kaiming":
                 fanoutweights = kaiming_uniform(torch.zeros(self.out_features,self.in_features+newinfeatures))[:, :newinfeatures]
-            elif len(fanoutweights.shape) == 1:
+            elif fanoutweights == "iterative_orthogonalization":
+                fanoutweights = iterative_orthogonalization(torch.zeros(self.out_features,
+                                                                        self.in_features+newinfeatures), 
+                                                            input=activations)[:, :newinfeatures]
+            elif isinstance(faninweights, torch.Tensor) and len(fanoutweights.shape) == 1:
                 fanoutweights = fanoutweights.unsqueeze(0)
 
             with torch.no_grad():
@@ -245,7 +249,11 @@ class ModLinear(nn.Linear):
                 faninweights = torch.zeros(newoutfeatures, self.in_features)
             elif faninweights == "kaiming":
                 faninweights = kaiming_uniform(torch.zeros(newoutfeatures+self.out_features, self.in_features))[:newoutfeatures, :]
-            elif len(faninweights.shape) == 1:
+            elif faninweights == "iterative_orthogonalization":
+                faninweights = iterative_orthogonalization(torch.zeros(newoutfeatures+self.out_features, 
+                                                                       self.in_features), 
+                                                           input=activations)[:newoutfeatures, :]
+            elif isinstance(faninweights, torch.Tensor) and len(faninweights.shape) == 1:
                 faninweights = faninweights.unsqueeze(1)
 
             with torch.no_grad():
@@ -323,8 +331,8 @@ class ModConv2d(nn.Conv2d):
             
     def forward(self, x):
         return self.nonlinearity(nn.functional.conv2d(self.batchnorm(x), self.masktensor * self.weight if self.masked else self.weight,
-                                                      self.maskvector * self.bias if self.masked else self.bias, self.stride, self.padding,
-                                                      self.dilation, self.groups))
+                                                      self.maskvector * self.bias if self.masked else self.bias, self.stride, 
+                                                      self.padding, self.dilation, self.groups))
 
     """
         Mask fanin weights of neurons of this layer that have indices in fanin and fanout weights 
@@ -444,23 +452,32 @@ class ModConv2d(nn.Conv2d):
         If faninweights and/or fanoutweights are 1D tensors, they are reshaped to 4D tensors
         with the appropriate number of channels/inputs.
 
+        If faninweights and/or fanoutweights are str, they are initialized with the resepective 
+        initialization.
+
         newoutchannels: number of channels to add to this layer
         newinchannels: number of inputs to add to this layer
         faninweights: weights of the new channels
         fanoutweights: weights of the new inputs (channels of previous layer)
     """
 
-    def grow(self, newoutchannels=0, newinchannels=0, faninweights=None, fanoutweights=None, optimizer=None):
+    def grow(self, newoutchannels=0, newinchannels=0, faninweights=None, fanoutweights=None, optimizer=None, 
+             activations: torch.Tensor = None):
         if newinchannels > 0:
             if fanoutweights is None:
                 fanoutweights = torch.zeros(
                     self.out_channels, newinchannels, self.kernel_size[0], self.kernel_size[1])
             elif fanoutweights == "kaiming":
-                fanoutweights = kaiming_uniform(torch.zeros(self.out_channels,self.in_channels+newinchannels, self.kernel_size[0], self.kernel_size[1]))[:, :newinchannels]
-            elif len(fanoutweights.shape) == 1:
+                fanoutweights = kaiming_uniform(torch.zeros(self.out_channels,self.in_channels+newinchannels, 
+                                                            self.kernel_size[0], self.kernel_size[1]))[:, :newinchannels]
+            elif fanoutweights == "iterative_orthogonalization":
+                fanoutweights = iterative_orthogonalization(torch.zeros(self.out_channels,self.in_channels+newinchannels, 
+                                                                        self.kernel_size[0], self.kernel_size[1]), 
+                                                            input=activations, stride=self.stride)[:, :newinchannels]
+            elif isinstance(fanoutweights, torch.Tensor) and len(fanoutweights.shape) <= 2:
                 fanoutweights = torch.reshape(
                     fanoutweights, (self.out_channels, newinchannels, self.kernel_size[0], self.kernel_size[1]))
-            elif len(fanoutweights.shape) == 3:
+            elif isinstance(fanoutweights, torch.Tensor) and len(fanoutweights.shape) == 3:
                 fanoutweights = fanoutweights.unsqueeze(0)
 
             with torch.no_grad():
@@ -525,10 +542,14 @@ class ModConv2d(nn.Conv2d):
             elif faninweights == "kaiming":
                 faninweights = kaiming_uniform(torch.zeros(newoutchannels+self.out_channels, self.in_channels, 
                                                            self.kernel_size[0], self.kernel_size[1]))[:newoutchannels]
-            elif len(faninweights.shape) == 1:
+            elif faninweights == "iterative_orthogonalization":
+                faninweights = iterative_orthogonalization(torch.zeros(newoutchannels+self.out_channels,self.in_channels, 
+                                                                       self.kernel_size[0], self.kernel_size[1]), 
+                                                           input=activations, stride=self.stride)[:newoutchannels, :]
+            elif isinstance(faninweights, torch.Tensor) and len(faninweights.shape) <= 2:
                 faninweights = torch.reshape(
                     faninweights, (newoutchannels, self.in_channels, self.kernel_size[0], self.kernel_size[1]))
-            elif len(faninweights.shape) == 3:
+            elif isinstance(faninweights, torch.Tensor) and len(faninweights.shape) == 3:
                 faninweights = faninweights.unsqueeze(1)
 
             newweight = nn.Parameter(
