@@ -9,7 +9,7 @@ weights: weights of a layer
 p: p-norm to use (int, inf, -inf, "fro", "nuc")
 fanin: whether to measure w.r.t. fan-in or fan-out weights
 """
-def weightsum(weights: torch.Tensor = None, p = 1, fanin: bool = True):
+def weight_sum(weights: torch.Tensor = None, p = 1, fanin: bool = True):
     if weights is None:
         return None
     if not fanin:
@@ -22,7 +22,7 @@ def weightsum(weights: torch.Tensor = None, p = 1, fanin: bool = True):
 Measure variance of activations for each neuron in a layer, used by Polyak 
 and Wolf (2015) to measure neuron importance
 """
-def actvar(acts: torch.Tensor = None):
+def activation_variance(acts: torch.Tensor = None):
     if acts is None:
         return None
     if len(acts.shape) > 2:
@@ -33,7 +33,7 @@ def actvar(acts: torch.Tensor = None):
 Measure effective rank of whole layer via thresholding singular values of 
 activations (or weights)
 """
-def effectivesvd(tensor: torch.Tensor = None, threshold: float = 0.01, 
+def effective_rank(tensor: torch.Tensor = None, threshold: float = 0.01, 
                  partial: bool = False, scale: bool = True):
     if tensor is None:
         return None
@@ -51,7 +51,7 @@ def effectivesvd(tensor: torch.Tensor = None, threshold: float = 0.01,
 Measure orthogonality gap of activations
 Used by Daneshmand et al. (2021)
 """
-def orthogonalitygap(acts: torch.Tensor = None):
+def orthogonality_gap(acts: torch.Tensor = None):
     if acts is None:
         return None
     if len(acts.shape) > 2:
@@ -65,7 +65,7 @@ Measure effective rank per neuron when that neuron is left out of the
 computation
 Used by Maile et al. (2022) for selection of neurogenesis initialization candidates
 """
-def svdscore(tensor: torch.Tensor = None, threshold: float = 0.01, addwhole: bool = False, 
+def svd_score(tensor: torch.Tensor = None, threshold: float = 0.01, addwhole: bool = False, 
              scale: bool = True):
     if tensor is None:
         return None
@@ -88,7 +88,7 @@ Measure nuclear norm (sum of singular values) of activations per neuron when tha
 of the computation
 Average version used by Sui et al. (2021) for channel pruning
 """
-def nucscore(activations: torch.Tensor = None, average: bool = False):
+def nuclear_score(activations: torch.Tensor = None, average: bool = False):
     if activations is None:
         return None
     scores = torch.zeros(activations.shape[1])
@@ -109,7 +109,7 @@ Measure fisher information of mask gradients: assume 0th dim is batch dim and re
 
 Used by Kwon et al. (2022)
 """
-def fisherinfo(maskgrads: torch.Tensor = None):
+def fisher_info(maskgrads: torch.Tensor = None):
     if maskgrads is None:
         return None
     return maskgrads.pow(2).sum(dim=0)

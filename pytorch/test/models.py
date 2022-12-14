@@ -12,7 +12,7 @@ class TestModels(unittest.TestCase):
             ModLinear(2, 3, masked=True),
             ModLinear(3, 4, masked=True),
             ModLinear(4, 5, masked=True),
-            trackacts=True
+            track_acts=True
         )
         x = torch.randn(10, 2)
         y = model(x)
@@ -25,12 +25,12 @@ class TestModels(unittest.TestCase):
         self.assertEqual(y.shape, (10, 5))
         self.assertEqual(model.activations['1'][-1,1], 0)
 
-        model.unmask(1, [1], clearacts=True)
+        model.unmask(1, [1], clear_acts=True)
         self.assertTrue(len(model.activations['1'].shape) < 2)
         y = model(x)
         self.assertEqual(y.shape, (10, 5))
 
-        model.prune(2, [0], clearacts=True)
+        model.prune(2, [0], clear_acts=True)
         y = model(x)
         self.assertEqual(y.shape, (10, 4))
         

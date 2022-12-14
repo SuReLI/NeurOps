@@ -7,10 +7,10 @@ from collections import defaultdict
 from .layers import ModLinear, ModConv2d
 
 class ModSequential(nn.Sequential):
-    def __init__(self,  *args, trackacts: bool = False):
+    def __init__(self,  *args, track_acts: bool = False):
         super(ModSequential, self).__init__(*args)
-        self.trackacts = trackacts
-        if self.trackacts:
+        self.track_acts = track_acts
+        if self.track_acts:
             self.activations = defaultdict(torch.Tensor)
             for name, module in self.named_modules():
                 if isinstance(module, ModLinear) or isinstance(module, ModConv2d):
@@ -27,67 +27,67 @@ class ModSequential(nn.Sequential):
             x = module(x)
         return x
 
-    def limitedforward(self, x, layerindex: int):
+    def limited_forward(self, x, layer_index: int):
         for i, module in enumerate(self._modules.values()):
             x = module(x)
-            if i == layerindex:
+            if i == layer_index:
                 return x
         return x
 
-    def mask(self, layerindex: int, neurons: list = [], clearacts: bool = False):
+    def mask(self, layer_index: int, neurons: list = [], clear_acts: bool = False):
         for i, module in enumerate(self._modules.values()):
-            if i == layerindex and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
+            if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.mask(neurons, [])
-            elif i == layerindex+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
+            elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.mask([], neurons)
-        if clearacts and self.trackacts:
-            for index in (layerindex+1, layerindex):
+        if clear_acts and self.track_acts:
+            for index in (layer_index+1, layer_index):
                 self.activations[str(index)] = torch.Tensor()
 
     
-    def unmask(self, layerindex: int, neurons: list = [], clearacts: bool = False):
+    def unmask(self, layer_index: int, neurons: list = [], clear_acts: bool = False):
         for i, module in enumerate(self._modules.values()):
-            if i == layerindex and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
+            if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.unmask(neurons, [])
-            elif i == layerindex+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
+            elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.unmask([], neurons)
-        if clearacts and self.trackacts:
-            for index in (layerindex+1, layerindex):
+        if clear_acts and self.track_acts:
+            for index in (layer_index+1, layer_index):
                 self.activations[str(index)] = torch.Tensor()
             
 
-    def prune(self, layerindex: int, neurons: list = [], optimizer=None, clearacts: bool = False):
+    def prune(self, layer_index: int, neurons: list = [], optimizer=None, clear_acts: bool = False):
         for i, module in enumerate(self._modules.values()):
-            if i == layerindex and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
+            if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.prune(neurons, [], optimizer=optimizer)
-            elif i == layerindex+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
+            elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.prune([], neurons, optimizer=optimizer)
-        for index in (layerindex+1, layerindex):
-            if clearacts and self.trackacts:
+        for index in (layer_index+1, layer_index):
+            if clear_acts and self.track_acts:
                 self.activations[str(index)] = torch.Tensor()
-            elif index == layerindex and self.trackacts and len(self.activations[str(index)].shape) >= 2:
-                neuronstokeep = range(self.activations[str(index)].shape[1])
-                neuronstokeep = [
+            elif index == layer_index and self.track_acts and len(self.activations[str(index)].shape) >= 2:
+                neurons_to_keep = range(self.activations[str(index)].shape[1])
+                neurons_to_keep = [
                     ntk for ntk in neurons if ntk not in neurons]
-                self.activations[str(index)] = self.activations[str(index)][:, neuronstokeep]
+                self.activations[str(index)] = self.activations[str(index)][:, neurons_to_keep]
 
 
-    def grow(self, layerindex: int, newneurons: int = 0, faninweights=None, fanoutweights=None, 
-             optimizer=None, clearacts: bool = False, sendacts: bool = False):
+    def grow(self, layer_index: int, newneurons: int = 0, fanin_weights=None, fanout_weights=None, 
+             optimizer=None, clear_acts: bool = False, sendacts: bool = False):
         for i, module in enumerate(self._modules.values()):
-            if i == layerindex and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
-                module.grow(newneurons, 0, faninweights = faninweights, optimizer=optimizer, 
-                activations=self.activations[str(layerindex-1)] if sendacts else None)
-                if self.trackacts:
-                    if clearacts:
-                        self.activations[str(layerindex)] = torch.Tensor()
+            if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
+                module.grow(newneurons, 0, fanin_weights = fanin_weights, optimizer=optimizer, 
+                activations=self.activations[str(layer_index-1)] if sendacts else None)
+                if self.track_acts:
+                    if clear_acts:
+                        self.activations[str(layer_index)] = torch.Tensor()
                     else:
-                        self.activations[str(layerindex)] = torch.cat(
-                            (self.activations[str(layerindex)], 
-                             torch.zeros(self.activations[str(layerindex)].shape[0], newneurons)), dim=1)
-            elif i == layerindex+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
-                module.grow(0, newneurons, fanoutweights = fanoutweights, optimizer=optimizer, 
-                activations=self[layerindex](self.activations[str(layerindex-1)]) if sendacts else None)
-                if clearacts and self.trackacts:
-                    self.activations[str(layerindex+1)] = torch.Tensor()
+                        self.activations[str(layer_index)] = torch.cat(
+                            (self.activations[str(layer_index)], 
+                             torch.zeros(self.activations[str(layer_index)].shape[0], newneurons)), dim=1)
+            elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
+                module.grow(0, newneurons, fanout_weights = fanout_weights, optimizer=optimizer, 
+                activations=self[layer_index](self.activations[str(layer_index-1)]) if sendacts else None)
+                if clear_acts and self.track_acts:
+                    self.activations[str(layer_index+1)] = torch.Tensor()
            

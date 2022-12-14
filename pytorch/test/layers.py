@@ -36,7 +36,7 @@ class TestLayers(unittest.TestCase):
         self.assertTrue(torch.allclose(addedout[:-2], prunedout))
         self.assertTrue(torch.allclose(addedout[-2:], torch.zeros(2)))
 
-        layer.grow(1, faninweights=torch.ones(1, 6))
+        layer.grow(1, fanin_weights=torch.ones(1, 6))
         self.assertEqual(layer.weight.shape, torch.Size([6, 6]))
         self.assertEqual(layer.bias.shape, torch.Size([6]))
         newaddedout = layer(data)
@@ -85,7 +85,7 @@ class TestLayers(unittest.TestCase):
         self.assertTrue(torch.allclose(addedout[:,:-2,:,:], prunedout))
         self.assertTrue(torch.allclose(addedout[:,-2:,:,:], torch.zeros(8,2,8,8)))  
 
-        layer.grow(1, faninweights=torch.ones(1, 4, 3, 3))
+        layer.grow(1, fanin_weights=torch.ones(1, 4, 3, 3))
         self.assertEqual(layer.weight.shape, torch.Size([8, 4, 3, 3]))
         self.assertEqual(layer.bias.shape, torch.Size([8]))
         newaddedout = layer(data)
