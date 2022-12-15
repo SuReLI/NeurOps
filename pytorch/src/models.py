@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from transformers import prune_layer
+
 from functools import partial
 from collections import defaultdict
 
@@ -97,50 +99,62 @@ class ModSequential(nn.Sequential):
            
 
 """
-A wrapper for the HuggingFace Transformer model that allows for masking of neurons.
+A wrapper for the HuggingFace Transformer model that allows for masking of attention heads and of 
+hidden neurons in the FFN layer of each transformer block.
 """
 class ModTransformer(nn.Module):
-    def __init__(self, model, config, track_acts: bool=False):
+    def __init__(self, model, track_acts: bool=False):
         super(ModTransformer, self).__init__()
         self.model = model
+        self.config = model.config
         for param in model.parameters():
             param.requires_grad_(False)
-        self.head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads).to(model.device)
-        self.neuron_mask = torch.ones(config.num_hidden_layers, config.intermediate_size).to(model.device)
+        self.head_mask = torch.ones(model.config.num_hidden_layers, model.config.num_attention_heads).to(model.device)
+        self.neuron_mask = torch.ones(model.config.num_hidden_layers, model.config.intermediate_size).to(model.device)
         self.handles = self.register_neuron_mask()
         self.track_acts = track_acts
         if track_acts:
-            config.output_attentions = True
+            model.config.output_attentions = True
             self.head_activations = defaultdict(torch.Tensor)
             self.neuron_activations = defaultdict(torch.Tensor)
             for index, layer in enumerate(getattr(self.model, self.model.base_model_prefix).encoder.layer):
-                layer.intermediate.register_forward_hook(partial(self._neuron_act_hook, index))
-                layer.register_forward_hook(partial(self._head_act_hook, index))
+                layer.output.register_forward_pre_hook(partial(self._neuron_act_pre_hook, index)) 
+                layer.register_forward_hook(partial(self._head_act_hook, index)) 
 
     def register_neuron_mask(self):
         handles = []
         for index, layer in enumerate(getattr(self.model, self.model.base_model_prefix).encoder.layer):
-            hook = lambda _, inputs: (inputs[0] * self.neuron_mask[index], inputs[1]) # :inputs[0].size(0)
-            handles.append(layer.output.register_forward_pre_hook(hook))
+            hook = lambda module, inputs, outputs: outputs * self.neuron_mask[index]
+            handles.append(layer.intermediate.register_forward_hook(hook))
         return handles
+    
+    def unregister_neuron_mask(self):
+        for handle in self.handles:
+            handle.remove()
 
     def _head_act_hook(self, index, module, input, output):
         self.head_activations[index] = torch.cat((self.head_activations[index], output[1].detach()), dim=0)
         if self.head_activations[index].shape[0] > 2*self.head_activations[index].shape[1]:
             self.head_activations[index] = self.head_activations[index][-2*self.head_activations[index].shape[1]:]
     
-    def _neuron_act_hook(self, index, module, input, output):
-        self.neuron_activations[index] = torch.cat((self.neuron_activations[index], output.detach()), dim=0)
+    def _neuron_act_pre_hook(self, index, module, input):
+        self.neuron_activations[index] = torch.cat((self.neuron_activations[index], input[0].detach()), dim=0)
         if self.neuron_activations[index].shape[0] > 2*self.neuron_activations[index].shape[1]:
             self.neuron_activations[index] = self.neuron_activations[index][-2*self.neuron_activations[index].shape[1]:]
     
-
     def forward(self, x):
         return self.model(x, head_mask=self.head_mask)
+
+    def mask_neurons(self, layer_index: int, neurons: list):
+        self.neuron_mask[layer_index][neurons] = 0
+
+    def mask_heads(self, layer_index: int, neurons: list):
+        self.head_mask[layer_index][neurons] = 0
+
+    def unmask_neurons(self, layer_index: int, neurons: list):
+        self.neuron_mask[layer_index][neurons] = 1
+
+    def unmask_heads(self, layer_index: int, neurons: list):
+        self.head_mask[layer_index][neurons] = 1
     
-    # """
-    # Remove head + neurons currently masked
-    # """
-    # def prune(self):
-    #     for index, layer in enumerate(getattr(self.model, self.model.base_model_prefix).encoder.layer.output):
-    #         prune_layer(layer, self.)
+    

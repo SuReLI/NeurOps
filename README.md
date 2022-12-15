@@ -3,7 +3,8 @@ A python implementation of growing and pruning in neural networks.
 
 TODO:
 * Test metrics
-* Add modifiable model classes for more complex architectures (transformers)
+* Add transformer pruning: BertAttention.prune_heads, emmental, prune_layer 
+* Add ViT and other implementations
 * Tutorials
 * Prepare blog post
 * JAX implementation
