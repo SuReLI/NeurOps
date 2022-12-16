@@ -40,36 +40,36 @@ class ModSequential(nn.Sequential):
                 return x
         return x
 
-    def mask(self, layer_index: int, neurons: list = [], clear_acts: bool = False):
+    def mask(self, layer_index: int, neurons: list = [], clear_activations: bool = False):
         for i, module in enumerate(self._modules.values()):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.mask(neurons, [])
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.mask([], neurons)
-        if clear_acts and self.track_activations:
+        if clear_activations and self.track_activations:
             for index in (layer_index+1, layer_index):
                 self.activations[str(index)] = torch.Tensor()
 
     
-    def unmask(self, layer_index: int, neurons: list = [], clear_acts: bool = False):
+    def unmask(self, layer_index: int, neurons: list = [], clear_activations: bool = False):
         for i, module in enumerate(self._modules.values()):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.unmask(neurons, [])
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.unmask([], neurons)
-        if clear_acts and self.track_activations:
+        if clear_activations and self.track_activations:
             for index in (layer_index+1, layer_index):
                 self.activations[str(index)] = torch.Tensor()
             
 
-    def prune(self, layer_index: int, neurons: list = [], optimizer=None, clear_acts: bool = False):
+    def prune(self, layer_index: int, neurons: list = [], optimizer=None, clear_activations: bool = False):
         for i, module in enumerate(self._modules.values()):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.prune(neurons, [], optimizer=optimizer)
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.prune([], neurons, optimizer=optimizer)
         for index in (layer_index+1, layer_index):
-            if clear_acts and self.track_activations:
+            if clear_activations and self.track_activations:
                 self.activations[str(index)] = torch.Tensor()
             elif index == layer_index and self.track_activations and len(self.activations[str(index)].shape) >= 2:
                 neurons_to_keep = range(self.activations[str(index)].shape[1])
@@ -79,13 +79,13 @@ class ModSequential(nn.Sequential):
 
 
     def grow(self, layer_index: int, newneurons: int = 0, fanin_weights=None, fanout_weights=None, 
-             optimizer=None, clear_acts: bool = False, sendacts: bool = False):
+             optimizer=None, clear_activations: bool = False, sendactivations: bool = False):
         for i, module in enumerate(self._modules.values()):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.grow(newneurons, 0, fanin_weights = fanin_weights, optimizer=optimizer, 
-                activations=self.activations[str(layer_index-1)] if sendacts else None)
+                activations=self.activations[str(layer_index-1)] if sendactivations else None)
                 if self.track_activations:
-                    if clear_acts:
+                    if clear_activations:
                         self.activations[str(layer_index)] = torch.Tensor()
                     else:
                         self.activations[str(layer_index)] = torch.cat(
@@ -93,8 +93,8 @@ class ModSequential(nn.Sequential):
                              torch.zeros(self.activations[str(layer_index)].shape[0], newneurons)), dim=1)
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.grow(0, newneurons, fanout_weights = fanout_weights, optimizer=optimizer, 
-                activations=self[layer_index](self.activations[str(layer_index-1)]) if sendacts else None)
-                if clear_acts and self.track_activations:
+                activations=self[layer_index](self.activations[str(layer_index-1)]) if sendactivations else None)
+                if clear_activations and self.track_activations:
                     self.activations[str(layer_index+1)] = torch.Tensor()
            
 

@@ -22,12 +22,12 @@ def weight_sum(weights: torch.Tensor = None, p = 1, fanin: bool = True):
 Measure variance of activations for each neuron in a layer, used by Polyak 
 and Wolf (2015) to measure neuron importance
 """
-def activation_variance(acts: torch.Tensor = None):
-    if acts is None:
+def activation_variance(activations: torch.Tensor = None):
+    if activations is None:
         return None
-    if len(acts.shape) > 2:
-        acts = acts.reshape(acts.shape[0], -1)
-    return torch.var(acts, dim=0)
+    if len(activations.shape) > 2:
+        activations = activations.reshape(activations.shape[0], -1)
+    return torch.var(activations, dim=0)
 
 """
 Measure effective rank of whole layer via thresholding singular values of 
@@ -38,7 +38,7 @@ def effective_rank(tensor: torch.Tensor = None, threshold: float = 0.01,
     if tensor is None:
         return None
     if len(tensor.shape) > 2:
-        tensor = tensor.reshape(tensor.shape[0], -1) #TODO: check if this is correct for acts and weights
+        tensor = tensor.reshape(tensor.shape[0], -1) #TODO: check if this is correct for activations and weights
     if scale:
         tensor = tensor.clone() / tensor.shape[1]**0.5
     _, S, _ = torch.svd(tensor, compute_uv=False)
@@ -51,13 +51,13 @@ def effective_rank(tensor: torch.Tensor = None, threshold: float = 0.01,
 Measure orthogonality gap of activations
 Used by Daneshmand et al. (2021)
 """
-def orthogonality_gap(acts: torch.Tensor = None):
-    if acts is None:
+def orthogonality_gap(activations: torch.Tensor = None):
+    if activations is None:
         return None
-    if len(acts.shape) > 2:
-       acts = acts.reshape(acts.shape[0], -1)
-    cov = acts @ acts.t()
-    return torch.norm(cov*torch.trace(cov) - torch.eye(acts.shape[0]).to(cov.device)/acts.shape[0], p='fro')
+    if len(activations.shape) > 2:
+       activations = activations.reshape(activations.shape[0], -1)
+    cov = activations @ activations.t()
+    return torch.norm(cov*torch.trace(cov) - torch.eye(activations.shape[0]).to(cov.device)/activations.shape[0], p='fro')
 
 
 """
@@ -95,13 +95,13 @@ def nuclear_score(activations: torch.Tensor = None, average: bool = False):
     if average and len(activations.shape) > 2:
         activations = activations.reshape(activations.shape[0], activations.shape[1], -1) 
     for neuron in range(activations.shape[1]):
-        prunedacts = torch.cat((activations[:, :neuron], activations[:, neuron+1:]), dim=1)
+        pruned_activations = torch.cat((activations[:, :neuron], activations[:, neuron+1:]), dim=1)
         if not average: 
-            if len(prunedacts.shape) > 2:
-                prunedacts = prunedacts.reshape(activations.shape[0], -1)
-            scores[neuron] = torch.norm(prunedacts, p='nuc')
+            if len(pruned_activations.shape) > 2:
+                pruned_activations = pruned_activations.reshape(activations.shape[0], -1)
+            scores[neuron] = torch.norm(pruned_activations, p='nuc')
         else:
-            scores[neuron] = torch.mean(torch.norm(prunedacts, p='nuc', dim=(1,2)))
+            scores[neuron] = torch.mean(torch.norm(pruned_activations, p='nuc', dim=(1,2)))
     return scores
 
 """

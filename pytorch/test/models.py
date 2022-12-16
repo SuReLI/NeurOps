@@ -26,12 +26,12 @@ class TestModels(unittest.TestCase):
         self.assertEqual(y.shape, (10, 5))
         self.assertEqual(model.activations['1'][-1,1], 0)
 
-        model.unmask(1, [1], clear_acts=True)
+        model.unmask(1, [1], clear_activations=True)
         self.assertTrue(len(model.activations['1'].shape) < 2)
         y = model(x)
         self.assertEqual(y.shape, (10, 5))
 
-        model.prune(2, [0], clear_acts=True)
+        model.prune(2, [0], clear_activations=True)
         y = model(x)
         self.assertEqual(y.shape, (10, 4))
         
