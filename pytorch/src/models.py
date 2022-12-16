@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 
-from transformers import prune_layer
-
 from functools import partial
 from collections import defaultdict
 
@@ -43,9 +41,7 @@ class ModSequential(nn.Sequential):
     def mask(self, layer_index: int, neurons: list = [], clear_activations: bool = False):
         for i, module in enumerate(self._modules.values()):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
-                module.mask(neurons, [])
-            elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
-                module.mask([], neurons)
+                module.mask(neurons)
         if clear_activations and self.track_activations:
             for index in (layer_index+1, layer_index):
                 self.activations[str(index)] = torch.Tensor()

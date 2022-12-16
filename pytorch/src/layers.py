@@ -18,8 +18,6 @@ class ModLinear(nn.Linear):
         self.masked = masked
 
         if masked:
-            self.mask_tensor = Parameter(torch.ones(
-                self.out_features, self.in_features), requires_grad=learnable_mask)
             self.mask_vector = Parameter(torch.ones(
                 self.out_features), requires_grad=learnable_mask)
 
@@ -42,7 +40,7 @@ class ModLinear(nn.Linear):
             return [self.weight]
 
     def forward(self, x: torch.Tensor):
-        return self.nonlinearity(nn.functional.linear(self.batchnorm(x), self.mask_tensor * self.weight if self.masked else self.weight,
+        return self.nonlinearity(nn.functional.linear(self.batchnorm(x), self.mask_vector.unsqueeze(1)*self.weight if self.masked else self.weight,
                                                       self.mask_vector * self.bias if self.masked else self.bias))
 
     """
@@ -53,11 +51,9 @@ class ModLinear(nn.Linear):
         fanout: list of indices of neurons of the previous layer
     """
 
-    def mask(self, fanin=[], fanout=[]):
+    def mask(self, fanin=[]):
         if self.masked:
-            self.mask_tensor.data[fanin, :] = 0
             self.mask_vector.data[fanin] = 0
-            self.mask_tensor.data[:, fanout] = 0
         else:
             print("No mask found")
 
@@ -71,9 +67,7 @@ class ModLinear(nn.Linear):
 
     def unmask(self, fanin=[], fanout=[]):
         if self.masked:
-            self.mask_tensor.data[fanin, :] = 1
             self.mask_vector.data[fanin] = 1
-            self.mask_tensor.data[:, fanout] = 1
             if not isinstance(self.batchnorm, nn.Identity):
                 if self.batchnorm.running_mean is not None:
                     self.batchnorm.running_mean[fanout] = 0
@@ -103,8 +97,6 @@ class ModLinear(nn.Linear):
             fotk for fotk in fanout_to_keep if fotk not in fanout_to_prune]
 
         if self.masked:
-            self.mask_tensor.data = self.mask_tensor.data[fanin_to_keep,
-                                                        :][:, fanout_to_keep]
             self.mask_vector.data = self.mask_vector.data[fanin_to_keep]
 
         with torch.no_grad():
@@ -228,9 +220,6 @@ class ModLinear(nn.Linear):
                                 group['params'][index] = new_batchnorm_bias
 
             self.weight = new_weight
-            if self.masked:
-                self.mask_tensor.data = torch.cat(
-                    (self.mask_tensor.data, torch.ones(self.out_features, new_in_features)), dim=1)
 
             self.in_features = self.in_features + new_in_features
 
@@ -285,8 +274,6 @@ class ModLinear(nn.Linear):
             if self.bias is not None:
                 self.bias = new_bias
             if self.masked:
-                self.mask_tensor.data = torch.cat(
-                    (self.mask_tensor.data, torch.ones(new_out_features, self.in_features)), dim=0)
                 self.mask_vector.data = torch.cat(
                     (self.mask_vector.data, torch.ones(new_out_features)))
 
@@ -306,8 +293,6 @@ class ModConv2d(nn.Conv2d):
         self.learnable_mask = learnable_mask
 
         if masked:
-            self.mask_tensor = Parameter(torch.ones(self.out_channels, self.in_channels,
-                                        self.kernel_size[0], self.kernel_size[1]), requires_grad=learnable_mask)
             self.mask_vector = Parameter(torch.ones(
                 self.out_channels), requires_grad=learnable_mask)
 
@@ -330,7 +315,7 @@ class ModConv2d(nn.Conv2d):
             return [self.weight]
             
     def forward(self, x):
-        return self.nonlinearity(nn.functional.conv2d(self.batchnorm(x), self.mask_tensor * self.weight if self.masked else self.weight,
+        return self.nonlinearity(nn.functional.conv2d(self.batchnorm(x), self.weight * self.mask_vector.view(-1,1,1,1) if self.masked else self.weight,
                                                       self.mask_vector * self.bias if self.masked else self.bias, self.stride, 
                                                       self.padding, self.dilation, self.groups))
 
@@ -342,10 +327,8 @@ class ModConv2d(nn.Conv2d):
         fanout: list of indices of neurons of the previous layer
     """
 
-    def mask(self, fanin=[], fanout=[]):
-        self.mask_tensor.data[fanin, :, :, :] = 0
+    def mask(self, fanin=[]):
         self.mask_vector.data[fanin] = 0
-        self.mask_tensor.data[:, fanout, :, :] = 0
 
     """
         Unmask fanin weights of channels of this layer that have indices in fanin and fanout weights 
@@ -356,9 +339,7 @@ class ModConv2d(nn.Conv2d):
     """
 
     def unmask(self, fanin=[], fanout=[]):
-        self.mask_tensor.data[fanin, :, :, :] = 1
         self.mask_vector.data[fanin] = 1
-        self.mask_tensor.data[:, fanout, :, :] = 1
         if not isinstance(self.batchnorm, nn.Identity):
             if self.batchnorm.running_mean is not None:
                 self.batchnorm.running_mean[fanout] = 0
@@ -428,8 +409,6 @@ class ModConv2d(nn.Conv2d):
             self.bias = new_bias
 
         if self.masked:
-            self.mask_tensor.data = self.mask_tensor.data[fanin_to_keep,
-                                                        :][:, fanout_to_keep]
             self.mask_vector.data = self.mask_vector.data[fanin_to_keep]
 
         self.out_channels = len(fanin_to_keep)
@@ -518,9 +497,6 @@ class ModConv2d(nn.Conv2d):
 
 
             self.weight = new_weight
-            if self.masked:
-                self.mask_tensor.data = torch.cat((self.mask_tensor, torch.ones(
-                    self.out_channels, new_in_channels, self.kernel_size[0], self.kernel_size[1])), dim=1)
 
             self.in_channels = self.in_channels + new_in_channels
 
@@ -580,8 +556,6 @@ class ModConv2d(nn.Conv2d):
             if self.bias is not None:
                 self.bias = new_bias
             if self.masked:
-                self.mask_tensor.data = torch.cat((self.mask_tensor, torch.ones(
-                    new_out_channels, self.in_channels, self.kernel_size[0], self.kernel_size[1])), dim=0)
                 self.mask_vector.data = torch.cat(
                     (self.mask_vector, torch.ones(new_out_channels)))
 

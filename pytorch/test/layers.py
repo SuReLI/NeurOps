@@ -44,14 +44,9 @@ class TestLayers(unittest.TestCase):
         self.assertTrue(torch.allclose(newaddedout[:-1], addedout))
         self.assertNotEqual(newaddedout[-1], torch.zeros(1))
 
-        layer.mask([], [1])
-        newmaskedout = layer(data)
-
         layer.prune([], [1])
         self.assertEqual(layer.weight.shape, torch.Size([6, 5]))
         self.assertEqual(layer.bias.shape, torch.Size([6]))
-        newprunedout = layer(torch.cat((data[0:1],data[2:])))
-        self.assertTrue(torch.allclose(newprunedout, newmaskedout))
 
 
     def test_conv2d(self):
@@ -93,14 +88,10 @@ class TestLayers(unittest.TestCase):
         self.assertTrue(torch.allclose(newaddedout[:,:-1,:,:], addedout[:,:,:,:]))
         self.assertFalse(torch.allclose(newaddedout[:,-1,:,:], torch.zeros(8,1,8,8)))
 
-        layer.mask([], [1])
-        newmaskedout = layer(data)
-
         layer.prune([], [1])
         self.assertEqual(layer.weight.shape, torch.Size([8, 3, 3, 3]))
         self.assertEqual(layer.bias.shape, torch.Size([8]))
-        newprunedout = layer(torch.cat((data[:,0:1,:,:],data[:,2:,:,:]), dim=1))
-        self.assertTrue(torch.allclose(newprunedout, newmaskedout))
+
 
     def test_optimizer(self):
         data = [torch.randn(8, 6) for _ in range(5)] 
@@ -115,7 +106,6 @@ class TestLayers(unittest.TestCase):
         self.assertTrue(out.shape == torch.Size([8, 2]))
 
         layer.mask([0, 1])
-        layer2.mask([],[0, 1])
         for batch, label in zip(data, labels):
             optimizer.zero_grad()
             maskedout = model(batch)
@@ -156,7 +146,6 @@ class TestLayers(unittest.TestCase):
         self.assertTrue(out.shape == torch.Size([8, 1, 1, 1]))
 
         layer.mask([0, 1])
-        layer2.mask([],[0, 1])
         for batch, label in zip(data, labels):
             optimizer.zero_grad()
             maskedout = model(batch)
@@ -199,10 +188,6 @@ class TestLayers(unittest.TestCase):
         self.assertTrue(maskedout.shape == torch.Size([8, 4]))
         self.assertTrue(torch.allclose(maskedout[:, 1:3], torch.zeros(8, 2)))
 
-        layer.mask([], [1])
-        masked2out = layer(data)
-        self.assertTrue(masked2out.shape == torch.Size([8, 4]))
-
         layer.unmask([2], [1])
         self.assertTrue(torch.allclose(layer.batchnorm.running_mean[1], torch.zeros(1)))
         self.assertTrue(torch.allclose(layer.batchnorm.running_var[1], torch.ones(1)))
@@ -229,10 +214,6 @@ class TestLayers(unittest.TestCase):
         maskedout = layer(data)
         self.assertTrue(maskedout.shape == torch.Size([8, 4, 2, 2]))
         self.assertTrue(torch.allclose(maskedout[:, 1:3], torch.zeros(8, 2, 2, 2)))
-
-        layer.mask([], [1])
-        masked2out = layer(data)
-        self.assertTrue(masked2out.shape == torch.Size([8, 4, 2, 2]))
 
         layer.unmask([2], [1])
         self.assertTrue(torch.allclose(layer.batchnorm.running_mean[1], torch.zeros(1)))
