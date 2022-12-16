@@ -12,7 +12,7 @@ class TestInitializations(unittest.TestCase):
             ModLinear(5, 6, masked=True),
             ModLinear(6, 4, masked=True),
             ModLinear(4, 4, masked=True),
-            track_acts=True
+            track_activations=True
         )
         x = torch.randn(10, 5)
         H = x

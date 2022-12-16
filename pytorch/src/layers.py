@@ -117,33 +117,33 @@ class ModLinear(nn.Linear):
 
         if optimizer is not None:
             for group in optimizer.param_groups:
-                for (i, param) in enumerate(group['params']):
+                for (index, param) in enumerate(group['params']):
                     if param is self.weight:
-                        for (_, v) in optimizer.state[param].items():
-                            if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
-                                v.data = v.data[fanin_to_keep,
+                        for (_, opt_state_param) in optimizer.state[param].items():
+                            if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.weight.shape:
+                                opt_state_param.data = opt_state_param.data[fanin_to_keep,
                                                 :][:, fanout_to_keep]
                         optimizer.state[new_weight] = optimizer.state[param]
-                        group['params'][i] = new_weight
+                        group['params'][index] = new_weight
                     if self.bias is not None and param is self.bias:
-                        for (_, v) in optimizer.state[param].items():
-                            if isinstance(v, torch.Tensor) and v.shape == self.bias.shape:
-                                v.data = v.data[fanin_to_keep]
+                        for (_, opt_state_param) in optimizer.state[param].items():
+                            if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.bias.shape:
+                                opt_state_param.data = opt_state_param.data[fanin_to_keep]
                         optimizer.state[new_bias] = optimizer.state[param]
-                        group['params'][i] = new_bias
+                        group['params'][index] = new_bias
                     if not isinstance(self.batchnorm, nn.Identity):
                         if self.batchnorm.weight is not None and param is self.batchnorm.weight:
-                            for (_, v) in optimizer.state[param].items():
-                                if isinstance(v, torch.Tensor) and v.shape == self.batchnorm.weight.shape:
-                                    v.data = v.data[fanout_to_keep]
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.batchnorm.weight.shape:
+                                    opt_state_param.data = opt_state_param.data[fanout_to_keep]
                             optimizer.state[new_batchnorm_weight] = optimizer.state[param]
-                            group['params'][i] = new_batchnorm_weight
+                            group['params'][index] = new_batchnorm_weight
                         if self.batchnorm.bias is not None and param is self.batchnorm.bias:
-                            for (_, v) in optimizer.state[param].items():
-                                if isinstance(v, torch.Tensor) and v.shape == self.batchnorm.bias.shape:
-                                    v.data = v.data[fanout_to_keep]
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.batchnorm.bias.shape:
+                                    opt_state_param.data = opt_state_param.data[fanout_to_keep]
                             optimizer.state[new_batchnorm_bias] = optimizer.state[param]
-                            group['params'][i] = new_batchnorm_bias
+                            group['params'][index] = new_batchnorm_bias
 
         self.weight = new_weight
         if self.bias is not None:
@@ -203,29 +203,29 @@ class ModLinear(nn.Linear):
 
             if optimizer is not None:
                 for group in optimizer.param_groups:
-                    for (i, param) in enumerate(group['params']):
+                    for (index, param) in enumerate(group['params']):
                         if param is self.weight:
-                            for (_, v) in optimizer.state[param].items():
-                                if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
-                                    v.data = torch.cat(
-                                        (v.data, torch.zeros_like(fanout_weights)), dim=1)
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.weight.shape:
+                                    opt_state_param.data = torch.cat(
+                                        (opt_state_param.data, torch.zeros_like(fanout_weights)), dim=1)
                             optimizer.state[new_weight] = optimizer.state[param]
-                            group['params'][i] = new_weight
+                            group['params'][index] = new_weight
                         if not isinstance(self.batchnorm, nn.Identity):
                             if self.batchnorm.weight is not None and param is self.batchnorm.weight:
-                                for (_, v) in optimizer.state[param].items():
-                                    if isinstance(v, torch.Tensor) and v.shape == self.batchnorm.weight.shape:
-                                        v.data = torch.cat(
-                                            (v.data, torch.ones(new_in_features)), dim=1)
+                                for (_, opt_state_param) in optimizer.state[param].items():
+                                    if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.batchnorm.weight.shape:
+                                        opt_state_param.data = torch.cat(
+                                            (opt_state_param.data, torch.ones(new_in_features)), dim=1)
                                 optimizer.state[new_batchnorm_weight] = optimizer.state[param]
-                                group['params'][i] = new_batchnorm_weight
+                                group['params'][index] = new_batchnorm_weight
                             if self.batchnorm.bias is not None and param is self.batchnorm.bias:
-                                for (_, v) in optimizer.state[param].items():
-                                    if isinstance(v, torch.Tensor) and v.shape == self.batchnorm.bias.shape:
-                                        v.data = torch.cat(
-                                            (v.data, torch.ones(new_in_features)), dim=1)
+                                for (_, opt_state_param) in optimizer.state[param].items():
+                                    if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.batchnorm.bias.shape:
+                                        opt_state_param.data = torch.cat(
+                                            (opt_state_param.data, torch.ones(new_in_features)), dim=1)
                                 optimizer.state[new_batchnorm_bias] = optimizer.state[param]
-                                group['params'][i] = new_batchnorm_bias
+                                group['params'][index] = new_batchnorm_bias
 
             self.weight = new_weight
             if self.masked:
@@ -265,21 +265,21 @@ class ModLinear(nn.Linear):
 
             if optimizer is not None:
                 for group in optimizer.param_groups:
-                    for (i, param) in enumerate(group['params']):
+                    for (index, param) in enumerate(group['params']):
                         if param is self.weight:
-                            for (_, v) in optimizer.state[param].items():
-                                if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
-                                    v.data = torch.cat(
-                                        (v.data, torch.zeros_like(fanin_weights)), dim=0)
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.weight.shape:
+                                    opt_state_param.data = torch.cat(
+                                        (opt_state_param.data, torch.zeros_like(fanin_weights)), dim=0)
                             optimizer.state[new_weight] = optimizer.state[param]
-                            group['params'][i] = new_weight
+                            group['params'][index] = new_weight
                         if self.bias is not None and param is self.bias:
-                            for (_, v) in optimizer.state[param].items():
-                                if isinstance(v, torch.Tensor) and v.shape == self.bias.shape:
-                                    v.data = torch.cat(
-                                        (v.data, torch.zeros(new_out_features)))
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.bias.shape:
+                                    opt_state_param.data = torch.cat(
+                                        (opt_state_param.data, torch.zeros(new_out_features)))
                             optimizer.state[new_bias] = optimizer.state[param]
-                            group['params'][i] = new_bias
+                            group['params'][index] = new_bias
 
             self.weight = new_weight
             if self.bias is not None:
@@ -395,33 +395,33 @@ class ModConv2d(nn.Conv2d):
 
         if optimizer is not None:
             for group in optimizer.param_groups:
-                for (i, param) in enumerate(group['params']):
+                for (index, param) in enumerate(group['params']):
                     if param is self.weight:
-                        for (_, v) in optimizer.state[param].items():
-                            if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
-                                v.data = v.data[fanin_to_keep,
+                        for (_, opt_state_param) in optimizer.state[param].items():
+                            if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.weight.shape:
+                                opt_state_param.data = opt_state_param.data[fanin_to_keep,
                                                 :][:, fanout_to_keep]
                         optimizer.state[new_weight] = optimizer.state[param]
-                        group['params'][i] = new_weight
+                        group['params'][index] = new_weight
                     if self.bias is not None and param is self.bias:
-                        for (_, v) in optimizer.state[param].items():
-                            if isinstance(v, torch.Tensor) and v.shape == self.bias.shape:
-                                v.data = v.data[fanin_to_keep]
+                        for (_, opt_state_param) in optimizer.state[param].items():
+                            if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.bias.shape:
+                                opt_state_param.data = opt_state_param.data[fanin_to_keep]
                         optimizer.state[new_bias] = optimizer.state[param]
-                        group['params'][i] = new_bias
+                        group['params'][index] = new_bias
                     if not isinstance(self.batchnorm, nn.Identity):
                         if self.batchnorm.weight is not None and param is self.batchnorm.weight:
-                            for (_, v) in optimizer.state[param].items():
-                                if isinstance(v, torch.Tensor) and v.shape == self.batchnorm.weight.shape:
-                                    v.data = v.data[fanout_to_keep]
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.batchnorm.weight.shape:
+                                    opt_state_param.data = opt_state_param.data[fanout_to_keep]
                             optimizer.state[new_batchnorm_weight] = optimizer.state[param]
-                            group['params'][i] = new_batchnorm_weight
+                            group['params'][index] = new_batchnorm_weight
                         if self.batchnorm.bias is not None and param is self.batchnorm.bias:
-                            for (_, v) in optimizer.state[param].items():
-                                if isinstance(v, torch.Tensor) and v.shape == self.batchnorm.bias.shape:
-                                    v.data = v.data[fanout_to_keep]
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.batchnorm.bias.shape:
+                                    opt_state_param.data = opt_state_param.data[fanout_to_keep]
                             optimizer.state[new_batchnorm_bias] = optimizer.state[param]
-                            group['params'][i] = new_batchnorm_bias
+                            group['params'][index] = new_batchnorm_bias
 
         self.weight = new_weight
         if self.bias is not None:
@@ -492,29 +492,29 @@ class ModConv2d(nn.Conv2d):
 
             if optimizer is not None:
                 for group in optimizer.param_groups:
-                    for (i, param) in enumerate(group['params']):
+                    for (index, param) in enumerate(group['params']):
                         if param is self.weight:  # note: p will automatically be updated in optimizer.param_groups
-                            for (_, v) in optimizer.state[param].items():
-                                if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
-                                    v.data = torch.cat(
-                                        (v.data, torch.zeros_like(fanout_weights)), dim=1)
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.weight.shape:
+                                    opt_state_param.data = torch.cat(
+                                        (opt_state_param.data, torch.zeros_like(fanout_weights)), dim=1)
                             optimizer.state[new_weight] = optimizer.state[param]
-                            group['params'][i] = new_weight
+                            group['params'][index] = new_weight
                         if not isinstance(self.batchnorm, nn.Identity):
                             if self.batchnorm.weight is not None and param is self.batchnorm.weight:
-                                for (_, v) in optimizer.state[param].items():
-                                    if isinstance(v, torch.Tensor) and v.shape == self.batchnorm.weight.shape:
-                                        v.data = torch.cat(
-                                            (v.data, torch.ones(new_in_channels)), dim=1)
+                                for (_, opt_state_param) in optimizer.state[param].items():
+                                    if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.batchnorm.weight.shape:
+                                        opt_state_param.data = torch.cat(
+                                            (opt_state_param.data, torch.ones(new_in_channels)), dim=1)
                                 optimizer.state[new_batchnorm_weight] = optimizer.state[param]
-                                group['params'][i] = new_batchnorm_weight
+                                group['params'][index] = new_batchnorm_weight
                             if self.batchnorm.bias is not None and param is self.batchnorm.bias:
-                                for (_, v) in optimizer.state[param].items():
-                                    if isinstance(v, torch.Tensor) and v.shape == self.batchnorm.bias.shape:
-                                        v.data = torch.cat(
-                                            (v.data, torch.ones(new_in_channels)), dim=1)
+                                for (_, opt_state_param) in optimizer.state[param].items():
+                                    if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.batchnorm.bias.shape:
+                                        opt_state_param.data = torch.cat(
+                                            (opt_state_param.data, torch.ones(new_in_channels)), dim=1)
                                 optimizer.state[new_batchnorm_bias] = optimizer.state[param]
-                                group['params'][i] = new_batchnorm_bias
+                                group['params'][index] = new_batchnorm_bias
 
 
             self.weight = new_weight
@@ -560,21 +560,21 @@ class ModConv2d(nn.Conv2d):
 
             if optimizer is not None:
                 for group in optimizer.param_groups:
-                    for (i, param) in enumerate(group['params']):
+                    for (index, param) in enumerate(group['params']):
                         if param is self.weight:
-                            for (_, v) in optimizer.state[param].items():
-                                if isinstance(v, torch.Tensor) and v.shape == self.weight.shape:
-                                    v.data = torch.cat(
-                                        (v.data, torch.zeros_like(fanin_weights)), dim=0)
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.weight.shape:
+                                    opt_state_param.data = torch.cat(
+                                        (opt_state_param.data, torch.zeros_like(fanin_weights)), dim=0)
                             optimizer.state[new_weight] = optimizer.state[param]
-                            group['params'][i] = new_weight
+                            group['params'][index] = new_weight
                         if self.bias is not None and param is self.bias:
-                            for (_, v) in optimizer.state[param].items():
-                                if isinstance(v, torch.Tensor) and v.shape == self.bias.shape:
-                                    v.data = torch.cat(
-                                        (v.data, torch.zeros(new_out_channels)))
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.bias.shape:
+                                    opt_state_param.data = torch.cat(
+                                        (opt_state_param.data, torch.zeros(new_out_channels)))
                             optimizer.state[new_bias] = optimizer.state[param]
-                            group['params'][i] = new_bias
+                            group['params'][index] = new_bias
 
             self.weight = new_weight
             if self.bias is not None:

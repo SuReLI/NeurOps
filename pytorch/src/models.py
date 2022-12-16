@@ -13,10 +13,10 @@ A modifiable sequential container that allows for masking, pruning, and growing 
 
 """
 class ModSequential(nn.Sequential):
-    def __init__(self,  *args, track_acts: bool = False):
+    def __init__(self,  *args, track_activations: bool = False):
         super(ModSequential, self).__init__(*args)
-        self.track_acts = track_acts
-        if self.track_acts:
+        self.track_activations = track_activations
+        if self.track_activations:
             self.activations = defaultdict(torch.Tensor)
             for name, module in self.named_modules():
                 if isinstance(module, ModLinear) or isinstance(module, ModConv2d):
@@ -46,7 +46,7 @@ class ModSequential(nn.Sequential):
                 module.mask(neurons, [])
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.mask([], neurons)
-        if clear_acts and self.track_acts:
+        if clear_acts and self.track_activations:
             for index in (layer_index+1, layer_index):
                 self.activations[str(index)] = torch.Tensor()
 
@@ -57,7 +57,7 @@ class ModSequential(nn.Sequential):
                 module.unmask(neurons, [])
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.unmask([], neurons)
-        if clear_acts and self.track_acts:
+        if clear_acts and self.track_activations:
             for index in (layer_index+1, layer_index):
                 self.activations[str(index)] = torch.Tensor()
             
@@ -69,9 +69,9 @@ class ModSequential(nn.Sequential):
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.prune([], neurons, optimizer=optimizer)
         for index in (layer_index+1, layer_index):
-            if clear_acts and self.track_acts:
+            if clear_acts and self.track_activations:
                 self.activations[str(index)] = torch.Tensor()
-            elif index == layer_index and self.track_acts and len(self.activations[str(index)].shape) >= 2:
+            elif index == layer_index and self.track_activations and len(self.activations[str(index)].shape) >= 2:
                 neurons_to_keep = range(self.activations[str(index)].shape[1])
                 neurons_to_keep = [
                     ntk for ntk in neurons if ntk not in neurons]
@@ -84,7 +84,7 @@ class ModSequential(nn.Sequential):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.grow(newneurons, 0, fanin_weights = fanin_weights, optimizer=optimizer, 
                 activations=self.activations[str(layer_index-1)] if sendacts else None)
-                if self.track_acts:
+                if self.track_activations:
                     if clear_acts:
                         self.activations[str(layer_index)] = torch.Tensor()
                     else:
@@ -94,7 +94,7 @@ class ModSequential(nn.Sequential):
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.grow(0, newneurons, fanout_weights = fanout_weights, optimizer=optimizer, 
                 activations=self[layer_index](self.activations[str(layer_index-1)]) if sendacts else None)
-                if clear_acts and self.track_acts:
+                if clear_acts and self.track_activations:
                     self.activations[str(layer_index+1)] = torch.Tensor()
            
 
@@ -103,7 +103,7 @@ A wrapper for the HuggingFace Transformer model that allows for masking of atten
 hidden neurons in the FFN layer of each transformer block.
 """
 class ModTransformer(nn.Module):
-    def __init__(self, model, track_acts: bool=False):
+    def __init__(self, model, track_activations: bool=False):
         super(ModTransformer, self).__init__()
         self.model = model
         self.config = model.config
@@ -112,8 +112,8 @@ class ModTransformer(nn.Module):
         self.head_mask = torch.ones(model.config.num_hidden_layers, model.config.num_attention_heads).to(model.device)
         self.neuron_mask = torch.ones(model.config.num_hidden_layers, model.config.intermediate_size).to(model.device)
         self.handles = self.register_neuron_mask()
-        self.track_acts = track_acts
-        if track_acts:
+        self.track_activations = track_activations
+        if track_activations:
             model.config.output_attentions = True
             self.head_activations = defaultdict(torch.Tensor)
             self.neuron_activations = defaultdict(torch.Tensor)

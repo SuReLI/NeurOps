@@ -12,7 +12,7 @@ class TestMetrics(unittest.TestCase):
         model = ModSequential(
             ModLinear(2, 10, masked=True),
             ModLinear(10, 1, masked=True),
-            track_acts = True
+            track_activations = True
         )
         data = [torch.randn(8, 2) for _ in range(5)] 
         labels = [torch.randn(8, 1) for _ in range(5)]

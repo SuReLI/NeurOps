@@ -13,7 +13,7 @@ class TestModels(unittest.TestCase):
             ModLinear(2, 3, masked=True),
             ModLinear(3, 4, masked=True),
             ModLinear(4, 5, masked=True),
-            track_acts=True
+            track_activations=True
         )
         x = torch.randn(10, 2)
         y = model(x)
@@ -42,7 +42,7 @@ class TestModels(unittest.TestCase):
     def test_modtransformer(self):
         config = transformers.BertConfig()
         model = transformers.BertForSequenceClassification(config)
-        modmodel = ModTransformer(model, track_acts=True)
+        modmodel = ModTransformer(model, track_activations=True)
         x = torch.randint(0, 100, (10, 20))
         _ = modmodel(x)
         self.assertEqual(modmodel.neuron_activations[2].shape[2], config.intermediate_size)
