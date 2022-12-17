@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
+import math
 
 def kaiming_uniform(tensor: torch.Tensor, a: float = 5**(1/2), mode: str = 'fan_in', nonlinearity: str = 'leaky_relu', fan: int = -1):
     if fan == -1:
         fan = nn.init._calculate_correct_fan(tensor, mode)
-    bound = torch.sqrt(3.0) *nn.init.calculate_gain(nonlinearity, a) / torch.sqrt(fan)
+    bound = nn.init.calculate_gain(nonlinearity, a) * math.sqrt(3.0/fan)
     with torch.no_grad():
         return tensor.uniform_(-bound, bound)
 

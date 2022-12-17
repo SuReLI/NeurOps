@@ -23,7 +23,7 @@ class TestInitializations(unittest.TestCase):
             H = layer(H)
         original1 = model[1].weight.data
         original2 = model[2].weight.data
-        model.grow(1,2,"iterative_orthogonalization","iterative_orthogonalization", sendactivations = True)
+        model.grow(1,2,"iterative_orthogonalization","iterative_orthogonalization", send_activations = True)
         self.assertTrue(model[1].weight.size(0) == 6)
         self.assertTrue(torch.allclose(original1, model[1].weight.data[:4]))
         self.assertFalse(torch.allclose(model[1].weight.data[4:], torch.zeros([2,6])))
@@ -31,7 +31,28 @@ class TestInitializations(unittest.TestCase):
         self.assertTrue(torch.allclose(original2, model[2].weight.data[:,:4]))
         self.assertFalse(torch.allclose(model[2].weight.data[:,4:], torch.zeros([4,2])))
 
-
+    def test_kaiming_uniform(self):
+        model = ModSequential(
+            ModLinear(5, 6, masked=True),
+            ModLinear(6, 4, masked=True),
+            ModLinear(4, 4, masked=True),
+            track_activations=True
+        )
+        for layer in model:
+            original = layer.weight.data.clone()
+            layer.weight.data = kaiming_uniform(layer.weight.data)
+            self.assertFalse(torch.allclose(original, layer.weight.data))
+            self.assertTrue(torch.allclose(original.mean(), layer.weight.data.mean(), atol=1e-1))
+            self.assertTrue(torch.allclose(original.std(), layer.weight.data.std(), atol=1e-1))
+        original1 = model[1].weight.data
+        original2 = model[2].weight.data
+        model.grow(1,2,"kaiming","kaiming")
+        self.assertTrue(model[1].weight.size(0) == 6)
+        self.assertTrue(torch.allclose(original1, model[1].weight.data[:4]))
+        self.assertFalse(torch.allclose(model[1].weight.data[4:], torch.zeros([2,6])))
+        self.assertTrue(model[2].weight.size(1) == 6)
+        self.assertTrue(torch.allclose(original2, model[2].weight.data[:,:4]))
+        self.assertFalse(torch.allclose(model[2].weight.data[:,4:], torch.zeros([4,2])))
 
 
 if __name__ == '__main__':
