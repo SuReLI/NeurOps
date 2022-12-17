@@ -75,11 +75,11 @@ class ModSequential(nn.Sequential):
 
 
     def grow(self, layer_index: int, newneurons: int = 0, fanin_weights=None, fanout_weights=None, 
-             optimizer=None, clear_activations: bool = False, sendactivations: bool = False):
+             optimizer=None, clear_activations: bool = False, send_activations: bool = False):
         for i, module in enumerate(self._modules.values()):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.grow(newneurons, 0, fanin_weights = fanin_weights, optimizer=optimizer, 
-                activations=self.activations[str(layer_index-1)] if sendactivations else None)
+                activations=self.activations[str(layer_index-1)] if send_activations else None)
                 if self.track_activations:
                     if clear_activations:
                         self.activations[str(layer_index)] = torch.Tensor()
@@ -89,7 +89,7 @@ class ModSequential(nn.Sequential):
                              torch.zeros(self.activations[str(layer_index)].shape[0], newneurons)), dim=1)
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.grow(0, newneurons, fanout_weights = fanout_weights, optimizer=optimizer, 
-                activations=self[layer_index](self.activations[str(layer_index-1)]) if sendactivations else None)
+                activations=self[layer_index](self.activations[str(layer_index-1)]) if send_activations else None)
                 if clear_activations and self.track_activations:
                     self.activations[str(layer_index+1)] = torch.Tensor()
            
