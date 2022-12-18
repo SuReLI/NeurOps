@@ -47,12 +47,12 @@ class ModSequential(nn.Sequential):
                 self.activations[str(index)] = torch.Tensor()
 
     
-    def unmask(self, layer_index: int, neurons: list = [], clear_activations: bool = False):
+    def unmask(self, layer_index: int, neurons: list = [], optimizer=None, clear_activations: bool = False):
         for i, module in enumerate(self._modules.values()):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
-                module.unmask(neurons, [])
+                module.unmask(neurons, [], optimizer=optimizer)
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
-                module.unmask([], neurons)
+                module.unmask([], neurons, optimizer=optimizer)
         if clear_activations and self.track_activations:
             for index in (layer_index+1, layer_index):
                 self.activations[str(index)] = torch.Tensor()

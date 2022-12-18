@@ -127,12 +127,24 @@ class TestLayers(unittest.TestCase):
             loss.backward()
             optimizer.step()
 
-        layer.grow(2, optimizer=optimizer)
-        layer2.grow(0, 2, optimizer=optimizer)
+        layer.grow(2, fanin_weights="kaiming", optimizer=optimizer)
+        layer2.grow(0, 2, fanout_weights="kaiming", optimizer=optimizer)
         self.assertEqual(layer.weight.shape, torch.Size([5, 6]))
         self.assertEqual(layer.bias.shape, torch.Size([5]))
         self.assertTrue(layer.weight in optimizer.param_groups[0]['params'])
         self.assertTrue(len(optimizer.state[layer.weight]) != 0)
+        for batch, label in zip(data, labels):
+            optimizer.zero_grad()
+            maskedout = model(batch)
+            loss = lossfunction(maskedout, label)
+            loss.backward()
+            optimizer.step()
+
+        layer.mask([4])
+        layer.unmask([0,4], [], optimizer=optimizer)
+        layer2.unmask([], [0,4], optimizer=optimizer)
+        self.assertEqual(layer.weight.shape, torch.Size([5, 6]))
+        self.assertEqual(layer.bias.shape, torch.Size([5]))
 
         data = [torch.randn(8, 4, 4, 4) for _ in range(5)]
         labels = [torch.randn(8, 1, 1, 1) for _ in range(5)]
@@ -189,8 +201,8 @@ class TestLayers(unittest.TestCase):
         self.assertTrue(torch.allclose(maskedout[:, 1:3], torch.zeros(8, 2)))
 
         layer.unmask([2], [1])
-        self.assertTrue(torch.allclose(layer.batchnorm.running_mean[1], torch.zeros(1)))
-        self.assertTrue(torch.allclose(layer.batchnorm.running_var[1], torch.ones(1)))
+        self.assertTrue(torch.allclose(layer.batchnorm.running_mean[2], torch.zeros(1)))
+        self.assertTrue(torch.allclose(layer.batchnorm.running_var[2], torch.ones(1)))
         unmaskedout = layer(data)
         self.assertTrue(unmaskedout.shape == torch.Size([8, 4]))
         rm = layer.batchnorm.running_mean

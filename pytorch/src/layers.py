@@ -52,31 +52,50 @@ class ModLinear(nn.Linear):
     """
 
     def mask(self, fanin=[]):
-        if self.masked:
-            self.mask_vector.data[fanin] = 0
-        else:
-            print("No mask found")
+        self.mask_vector.data[fanin] = 0
 
     """
         Unmask fanin weights of neurons of this layer that have indices in fanin and fanout weights 
-        of neurons of the previous layer that have indices in fanout.
+        of neurons of the previous layer that have indices in fanout. If optimizer is provided, ensure
+        that the optimizer state is also refreshed for a new neuron.
 
         fanin: list of indices of neurons of this layer
         fanout: list of indices of neurons of the previous layer
+        optimizer: optimizer to reinitialize state of newly unmasked neurons
     """
 
-    def unmask(self, fanin=[], fanout=[]):
-        if self.masked:
-            self.mask_vector.data[fanin] = 1
-            if not isinstance(self.batchnorm, nn.Identity):
-                if self.batchnorm.running_mean is not None:
-                    self.batchnorm.running_mean[fanout] = 0
-                    self.batchnorm.running_var[fanout] = 1
-                if self.batchnorm.weight is not None:
-                    self.batchnorm.weight.data[fanout] = 1
-                    self.batchnorm.bias.data[fanout] = 0  
-        else:
-            print("No mask found")  
+    def unmask(self, fanin=[], fanout=[], optimizer=None):
+        self.mask_vector.data[fanin] = 1
+
+        if not isinstance(self.batchnorm, nn.Identity):
+            if self.batchnorm.running_mean is not None:
+                self.batchnorm.running_mean[fanin] = 0
+                self.batchnorm.running_var[fanin] = 1
+            if self.batchnorm.weight is not None:
+                self.batchnorm.weight.data[fanin] = 1
+                self.batchnorm.bias.data[fanin] = 0  
+
+        if optimizer is not None:
+            for group in optimizer.param_groups:
+                for (_, param) in enumerate(group['params']):
+                    if param is self.weight:
+                        for (_, opt_state_param) in optimizer.state[param].items():
+                            if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.weight.shape:
+                                opt_state_param.data[fanin] = 0
+                                opt_state_param.data[:, fanout] = 0
+                    if self.bias is not None and param is self.bias:
+                        for (_, opt_state_param) in optimizer.state[param].items():
+                            if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.bias.shape:
+                                opt_state_param.data[fanin] = 0
+                    if not isinstance(self.batchnorm, nn.Identity):
+                        if self.batchnorm.weight is not None and param is self.batchnorm.weight:
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.batchnorm.weight.shape:
+                                    opt_state_param.data[fanin] = 0
+                        if self.batchnorm.bias is not None and param is self.batchnorm.bias:
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.batchnorm.bias.shape:
+                                    opt_state_param.data[fanin] = 0
 
     """
         Remove fanin weights of neurons (of this layer) in list fanin_to_prune from the layer, and 
@@ -332,14 +351,17 @@ class ModConv2d(nn.Conv2d):
 
     """
         Unmask fanin weights of channels of this layer that have indices in fanin and fanout weights 
-        of channels of the previous layer that have indices in fanout.
+        of channels of the previous layer that have indices in fanout. If batchnorm is used, also
+        unmask batchnorm parameters. If optimizer is provided, also reinitialize optimizer state.
 
         fanin: list of indices of channels of this layer
         fanout: list of indices of channels of the previous layer
+        optimizer: optimizer used to train the model
     """
 
-    def unmask(self, fanin=[], fanout=[]):
+    def unmask(self, fanin=[], fanout=[], optimizer=None):
         self.mask_vector.data[fanin] = 1
+
         if not isinstance(self.batchnorm, nn.Identity):
             if self.batchnorm.running_mean is not None:
                 self.batchnorm.running_mean[fanout] = 0
@@ -347,6 +369,29 @@ class ModConv2d(nn.Conv2d):
             if self.batchnorm.weight is not None:
                 self.batchnorm.weight.data[fanout] = 1
                 self.batchnorm.bias.data[fanout] = 0
+
+        if optimizer is not None:
+            for group in optimizer.param_groups:
+                for (_, param) in enumerate(group['params']):
+                    if param is self.weight:
+                        for (_, opt_state_param) in optimizer.state[param].items():
+                            if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.weight.shape:
+                                opt_state_param.data[fanout] = 0
+                                opt_state_param.data[:, fanin] = 0
+                    if self.bias is not None and param is self.bias:
+                        for (_, opt_state_param) in optimizer.state[param].items():
+                            if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.bias.shape:
+                                opt_state_param.data[fanout] = 0
+                    if not isinstance(self.batchnorm, nn.Identity):
+                        if self.batchnorm.weight is not None and param is self.batchnorm.weight:
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.batchnorm.weight.shape:
+                                    opt_state_param.data[fanout] = 0
+                        if self.batchnorm.bias is not None and param is self.batchnorm.bias:
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.batchnorm.bias.shape:
+                                    opt_state_param.data[fanout] = 0
+
 
     """
         Remove fanin weights of channels (of this layer) in list fanin_to_prune from the layer, and 
