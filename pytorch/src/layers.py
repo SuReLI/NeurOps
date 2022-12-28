@@ -11,7 +11,8 @@ from .initializations import *
 
 class ModLinear(nn.Linear):
     def __init__(self, in_features: int, out_features: int, bias: bool = True, masked: bool = False,
-                 learnable_mask: bool = False, nonlinearity: str = 'relu', prebatchnorm: bool = False):
+                 learnable_mask: bool = False, nonlinearity: str = 'relu', prebatchnorm: bool = False, 
+                 preflatten: bool = False):
 
         super().__init__(in_features, out_features, bias)
 
@@ -32,16 +33,39 @@ class ModLinear(nn.Linear):
             self.batchnorm = nn.BatchNorm1d(self.in_features)
         else:
             self.batchnorm = nn.Identity()
+        
+        if preflatten:
+            self.preflatten = nn.Flatten(start_dim=1)
+        else:
+            self.preflatten = nn.Identity()
     
-    def weightparameters(self):
+    def weight_parameters(self):
         if self.bias is not None:
             return [self.weight, self.bias]
         else:
             return [self.weight]
 
-    def forward(self, x: torch.Tensor):
-        return self.nonlinearity(nn.functional.linear(self.batchnorm(x), self.mask_vector.unsqueeze(1)*self.weight if self.masked else self.weight,
-                                                      self.mask_vector * self.bias if self.masked else self.bias))
+    def get_weights(self):
+        return self.mask_vector.unsqueeze(1)*self.weight if self.masked else self.weight
+
+    def get_biases(self):
+        return self.mask_vector * self.bias if self.masked else self.bias
+
+    def forward(self, x: torch.Tensor, aux: torch.Tensor = None, old_x: torch.Tensor = None, 
+                previous: nn.Module = None):
+        out = nn.functional.linear(self.batchnorm(self.preflatten(x)), self.get_weights(),
+                                                      self.get_biases())
+        if aux is None:
+            return self.nonlinearity(out)
+        if isinstance(previous, nn.Linear):
+            auxout =  nn.functional.linear(previous.batchnorm(old_x), aux)
+        elif isinstance(previous, nn.Conv2d):
+            auxout = nn.Flatten(start_dim=1)(nn.functional.conv2d(previous.batchnorm(old_x), aux, 
+                                              padding=previous.padding))
+        if self.masked:
+            auxout = auxout * self.mask_vector.view(1, -1)
+        return self.nonlinearity(out + auxout)
+
 
     """
         Mask fanin weights of neurons of this layer that have indices in fanin and fanout weights 
@@ -332,11 +356,21 @@ class ModConv2d(nn.Conv2d):
             return [self.weight, self.bias]
         else:
             return [self.weight]
-            
-    def forward(self, x):
-        return self.nonlinearity(nn.functional.conv2d(self.batchnorm(x), self.weight * self.mask_vector.view(-1,1,1,1) if self.masked else self.weight,
-                                                      self.mask_vector * self.bias if self.masked else self.bias, self.stride, 
-                                                      self.padding, self.dilation, self.groups))
+
+    def get_weights(self):
+        return self.weight * self.mask_vector.view(-1,1,1,1) if self.masked else self.weight
+
+    def get_biases(self):
+        return self.mask_vector * self.bias if self.masked else self.bias
+
+    def forward(self, x: torch.Tensor, aux: torch.Tensor = None, old_x: torch.Tensor = None, previous: nn.Module = None):
+        out = nn.functional.conv2d(self.batchnorm(x), self.get_weights(), self.get_biases(), self.stride, 
+                                   self.padding, self.dilation, self.groups)
+        if aux is None:
+            return self.nonlinearity(out)
+        return self.nonlinearity(out + nn.functional.conv2d(previous.batchnorm(old_x), aux,  
+                                 padding=[prev+curr for prev,curr in zip(previous.padding,self.padding)]))
+
 
     """
         Mask fanin weights of neurons of this layer that have indices in fanin and fanout weights 

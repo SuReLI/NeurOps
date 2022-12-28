@@ -241,6 +241,102 @@ class TestLayers(unittest.TestCase):
         self.assertTrue(torch.allclose(layer.batchnorm.running_mean[:-1], rm[1:]))
         self.assertTrue(torch.allclose(layer.batchnorm.running_mean[-1], torch.zeros(1)))
 
+    def test_auxiliary(self):
+        layer1 = ModLinear(6, 4, masked=True)
+        layer2 = ModLinear(4, 3, masked=True)
+        data = torch.randn(8, 6)
+        output = torch.randn(8, 3)
+        aux = torch.nn.parameter.Parameter(torch.zeros(3, 6))
+        lossfunction = nn.CrossEntropyLoss()
+        
+        inter = layer1(data)
+        out = layer2(inter, aux, data, layer1)
+        loss = lossfunction(out, output)
+        loss.backward()
+        self.assertTrue(out.shape == torch.Size([8, 3]))
+        self.assertTrue(aux.grad.shape == torch.Size([3, 6]))
+        oldauxgrad = aux.grad.clone()
+        self.assertFalse(torch.allclose(aux.grad, torch.zeros(3, 6)))
+        aux.grad = torch.zeros(3, 6)
+
+        inter = layer1(data)
+        out = layer2(inter, aux, data, layer1)
+        loss = lossfunction(out, output)
+        loss.backward()
+        self.assertTrue(torch.allclose(aux.grad, oldauxgrad))
+        aux.grad = torch.zeros(3, 6)
+
+        layer1.mask([0, 1])
+
+        inter = layer1(data)
+        out = layer2(inter, aux, data, layer1)
+        loss = lossfunction(out, output)
+        loss.backward()
+        auxgrad = aux.grad.clone()
+        self.assertTrue(out.shape == torch.Size([8, 3]))
+        self.assertTrue(aux.grad.shape == torch.Size([3, 6]))
+        self.assertFalse(torch.allclose(auxgrad, oldauxgrad))
+        aux.grad = torch.zeros(3, 6)
+
+        layer1.prune([0,1])
+        layer2.prune([], [0,1])
+
+        inter = layer1(data)
+        out = layer2(inter, aux, data, layer1)
+        loss = lossfunction(out, output)
+        loss.backward()
+        self.assertTrue(torch.allclose(aux.grad, auxgrad))
+        aux.grad = torch.zeros(3, 6)
+
+        layer1.grow(1, fanin_weights="kaiming")
+        layer2.grow(0, 1, fanout_weights="kaiming")
+
+        inter = layer1(data)
+        out = layer2(inter, aux, data, layer1)
+        loss = lossfunction(out, output)
+        loss.backward()
+        self.assertFalse(torch.allclose(aux.grad, auxgrad))
+        aux.grad = torch.zeros(3, 6)
+
+        layer1 = ModConv2d(in_channels=6, out_channels=2, kernel_size=3, masked=True)
+        layer2 = ModLinear(2, 3, masked=True, preflatten=True)
+        data = torch.randn(8, 6, 3, 3)
+        output = torch.randn(8, 3)
+        aux = torch.nn.parameter.Parameter(torch.zeros(3, 6, 3, 3))
+        lossfunction = nn.CrossEntropyLoss()
+
+        inter = layer1(data)
+        out = layer2(inter, aux, data, layer1)
+        loss = lossfunction(out, output)
+        loss.backward()
+        self.assertTrue(out.shape == torch.Size([8, 3]))
+        self.assertTrue(aux.grad.shape == torch.Size([3, 6, 3, 3]))
+        oldauxgrad = aux.grad.clone()
+        self.assertFalse(torch.allclose(aux.grad, torch.zeros(3, 6, 3, 3)))
+        aux.grad = torch.zeros(3, 6, 3, 3)
+
+        layer1 = ModConv2d(in_channels=6, out_channels=2, kernel_size=3, padding = 1, masked=True)
+        layer2 = ModConv2d(in_channels=2, out_channels=3, kernel_size=3, masked=True)
+        data = torch.randn(8, 6, 3, 3)
+        output = torch.randn(8, 3, 1, 1)
+        aux = torch.nn.parameter.Parameter(torch.zeros(3, 6, 5, 5))
+        lossfunction = nn.MSELoss()
+
+        inter = layer1(data)
+        out = layer2(inter, aux, data, layer1)
+        loss = lossfunction(out, output)
+        loss.backward()
+        self.assertTrue(out.shape == torch.Size([8, 3, 1, 1]))
+        self.assertTrue(aux.grad.shape == torch.Size([3, 6, 5, 5]))
+        self.assertFalse(torch.allclose(aux.grad, torch.zeros(3, 6, 5, 5)))
+
+
+
+
+
+
+
+
 
 
 

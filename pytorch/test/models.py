@@ -56,7 +56,32 @@ class TestModels(unittest.TestCase):
         self.assertTrue(torch.allclose(modmodel.neuron_activations[2][10:20,:,:128], torch.zeros(10,20,128)))
         
 
+    def test_auxiliary(self):
+        layer1 = ModConv2d(in_channels=6, out_channels=2, kernel_size=3, masked=True)
+        layer2 = ModLinear(2, 3, masked=True, preflatten=True)  
+        model = ModSequential(layer1, layer2, track_activations=True,
+                              track_auxiliary_gradients=True)
+        loss = torch.nn.CrossEntropyLoss()
+        ytrue = torch.randn(10, 3)
+        x = torch.randn(10, 6, 3, 3)
+        y = model(x, model.auxiliaries)
+        loss = loss(y, ytrue)
+        loss.backward()
+        self.assertEqual(y.shape, (10, 3)) 
+        self.assertEqual(len(model.auxiliaries), 1)
+        self.assertFalse(torch.allclose(model.auxiliaries[0].grad, torch.zeros(3, 6, 3, 3)))
+
+        config = transformers.BertConfig()
+        model = transformers.BertForSequenceClassification(config)
+        modmodel = ModTransformer(model, track_activations=True,
+                                  track_auxiliary_gradients=True)
+        x = torch.randint(0, 100, (10, 20))
+        y = modmodel(x, labels=torch.randint(0, 2, (10,)))
+        y.loss.backward()
+        self.assertEqual(len(modmodel.auxiliaries), 12)
+        self.assertFalse(torch.allclose(modmodel.auxiliaries[0].grad, torch.zeros_like(modmodel.auxiliaries[0].grad)))
         
+
 
 
 
