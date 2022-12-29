@@ -7,15 +7,16 @@ L1 sum of weights is used by Li et al (2019) to measure neuron importance
 
 weights: weights of a layer
 p: p-norm to use (int, inf, -inf, "fro", "nuc")
-fanin: whether to measure w.r.t. fan-in or fan-out weights
+fanin: whether to measure w.r.t. fan-in weights (so output length is # of output neurons) or fan-out weights
 """
 def weight_sum(weights: torch.Tensor = None, p = 1, fanin: bool = True):
     if weights is None:
         return None
-    if not fanin:
+    if fanin:
         weights = weights.t()
     if len(weights.shape) > 2:
         weights = weights.reshape(weights.shape[0], -1)
+
     return torch.norm(weights, p=p, dim=0)
 
 """
