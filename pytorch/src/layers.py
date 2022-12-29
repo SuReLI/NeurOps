@@ -7,8 +7,6 @@ from .initializations import *
 """
     A modifiable version of Conv2D that can increase or decrease channel count and/or be masked
 """
-
-
 class ModLinear(nn.Linear):
     def __init__(self, in_features: int, out_features: int, bias: bool = True, masked: bool = False,
                  learnable_mask: bool = False, nonlinearity: str = 'relu', prebatchnorm: bool = False, 
@@ -58,6 +56,8 @@ class ModLinear(nn.Linear):
         if aux is None:
             return self.nonlinearity(out)
         if isinstance(previous, nn.Linear):
+            if len(old_x.shape) == 4:
+                old_x = nn.Flatten(start_dim=1)(old_x)
             auxout =  nn.functional.linear(previous.batchnorm(old_x), aux)
         elif isinstance(previous, nn.Conv2d):
             auxout = nn.Flatten(start_dim=1)(nn.functional.conv2d(previous.batchnorm(old_x), aux, 
