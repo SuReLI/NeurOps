@@ -12,12 +12,12 @@ fanin: whether to measure w.r.t. fan-in weights (so output length is # of output
 def weight_sum(weights: torch.Tensor = None, p = 1, fanin: bool = True):
     if weights is None:
         return None
-    if fanin:
-        weights = weights.t()
+    if not fanin:
+        weights = torch.transpose(weights, 0, 1)
     if len(weights.shape) > 2:
         weights = weights.reshape(weights.shape[0], -1)
 
-    return torch.norm(weights, p=p, dim=0)
+    return torch.norm(weights, p=p, dim=1)
 
 """
 Measure variance of activations for each neuron in a layer, used by Polyak 
