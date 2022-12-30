@@ -64,6 +64,15 @@ class ModSequential(nn.Sequential):
     def _act_shape_hook(self, module, input, output):
         self.conv_output_shape = output.shape[1:]
 
+    def parameter_count(self, masked: bool = False):
+        count = 0
+        for i in range(len(self)):
+            if isinstance(self[i], ModLinear) or isinstance(self[i], ModConv2d):
+                count += self[i].parameter_count(masked=masked, previous_mask = self[i-1].mask_vector if i > 0 else None)
+            else:
+                count += sum(p.numel() for p in self[i].parameters())
+        return count
+
     def forward(self, x, auxiliaries: list = None, layer_index: int = -1):
         old_x = x
         modules = list(self._modules.values())

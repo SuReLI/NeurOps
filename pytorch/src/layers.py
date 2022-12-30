@@ -49,6 +49,25 @@ class ModLinear(nn.Linear):
     def get_biases(self):
         return self.mask_vector * self.bias if self.masked else self.bias
 
+    def parameter_count(self, masked: bool = False, previous_mask = None):
+        count = 0
+        if masked and self.masked:
+            count += torch.sum(self.get_weights() != 0).item()
+            if self.bias is not None:
+                count += torch.sum(self.get_biases() != 0).item()
+            if not isinstance(self.batchnorm, nn.Identity) and previous_mask is not None:
+                count += torch.sum(self.batchnorm.weight * previous_mask != 0).item()
+                count += torch.sum(self.batchnorm.bias * previous_mask != 0).item()
+        else:
+            count += torch.sum(self.weight != 0).item()
+            if self.bias is not None:
+                count += torch.sum(self.bias != 0).item()
+            if not isinstance(self.batchnorm, nn.Identity):
+                count += torch.sum(self.batchnorm.weight != 0).item()
+                count += torch.sum(self.batchnorm.bias != 0).item()
+        return count
+
+
     def forward(self, x: torch.Tensor, aux: torch.Tensor = None, old_x: torch.Tensor = None, 
                 previous: nn.Module = None):
         out = nn.functional.linear(self.batchnorm(self.preflatten(x)), self.get_weights(),
