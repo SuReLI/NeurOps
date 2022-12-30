@@ -158,13 +158,12 @@ class ModLinear(nn.Linear):
         fanout_to_keep = [
             fotk for fotk in fanout_to_keep if fotk not in fanout_to_prune]
 
-        if self.masked:
-            self.mask_vector.data = self.mask_vector.data[fanin_to_keep]
-
         with torch.no_grad():
             new_weight = Parameter(self.weight[fanin_to_keep, :][:, fanout_to_keep])
             if self.bias is not None:
                 new_bias = Parameter(self.bias[fanin_to_keep])
+            if self.masked:
+                new_mask_vector = Parameter(self.mask_vector[fanin_to_keep])
             if not isinstance(self.batchnorm, nn.Identity) and self.batchnorm.weight is not None:
                 new_batchnorm_weight = Parameter(self.batchnorm.weight[fanout_to_keep])
                 new_batchnorm_bias = Parameter(self.batchnorm.bias[fanout_to_keep])
@@ -185,6 +184,12 @@ class ModLinear(nn.Linear):
                                 opt_state_param.data = opt_state_param.data[fanin_to_keep]
                         optimizer.state[new_bias] = optimizer.state[param]
                         group['params'][index] = new_bias
+                    if self.masked and param is self.mask_vector:
+                        for (_, opt_state_param) in optimizer.state[param].items():
+                            if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.mask_vector.shape:
+                                opt_state_param.data = opt_state_param.data[fanin_to_keep]
+                        optimizer.state[new_mask_vector] = optimizer.state[param]
+                        group['params'][index] = new_mask_vector
                     if not isinstance(self.batchnorm, nn.Identity):
                         if self.batchnorm.weight is not None and param is self.batchnorm.weight:
                             for (_, opt_state_param) in optimizer.state[param].items():
@@ -202,11 +207,14 @@ class ModLinear(nn.Linear):
         self.weight = new_weight
         if self.bias is not None:
             self.bias = new_bias
+        if self.masked:
+            self.mask_vector = new_mask_vector
 
         self.out_features = len(fanin_to_keep)
         self.in_features = len(fanout_to_keep)
 
         if not isinstance(self.batchnorm, nn.Identity):
+            self.batchnorm.num_features = self.in_features
             if self.batchnorm.running_mean is not None:
                 self.batchnorm.running_mean = self.batchnorm.running_mean[fanout_to_keep]
                 self.batchnorm.running_var = self.batchnorm.running_var[fanout_to_keep]
@@ -286,6 +294,7 @@ class ModLinear(nn.Linear):
             self.in_features = self.in_features + new_in_features
 
             if not isinstance(self.batchnorm, nn.Identity):
+                self.batchnorm.num_features = self.in_features
                 if self.batchnorm.running_mean is not None:
                     self.batchnorm.running_mean = torch.cat(
                         (self.batchnorm.running_mean, torch.zeros(new_in_features)))
@@ -380,7 +389,27 @@ class ModConv2d(nn.Conv2d):
         return self.weight * self.mask_vector.view(-1,1,1,1) if self.masked else self.weight
 
     def get_biases(self):
+        if self.bias is None:
+            return None
         return self.mask_vector * self.bias if self.masked else self.bias
+    
+    def parameter_count(self, masked: bool = False, previous_mask = None):
+        count = 0
+        if masked and self.masked:
+            count += torch.sum(self.get_weights() != 0).item()
+            if self.bias is not None:
+                count += torch.sum(self.get_biases() != 0).item()
+            if not isinstance(self.batchnorm, nn.Identity) and previous_mask is not None:
+                count += torch.sum(self.batchnorm.weight * previous_mask != 0).item()
+                count += torch.sum(self.batchnorm.bias * previous_mask != 0).item()
+        else:
+            count += torch.sum(self.weight != 0).item()
+            if self.bias is not None:
+                count += torch.sum(self.bias != 0).item()
+            if not isinstance(self.batchnorm, nn.Identity):
+                count += torch.sum(self.batchnorm.weight != 0).item()
+                count += torch.sum(self.batchnorm.bias != 0).item()
+        return count
 
     def forward(self, x: torch.Tensor, aux: torch.Tensor = None, old_x: torch.Tensor = None, previous: nn.Module = None):
         out = nn.functional.conv2d(self.batchnorm(x), self.get_weights(), self.get_biases(), self.stride, 
@@ -464,13 +493,14 @@ class ModConv2d(nn.Conv2d):
             fotk for fotk in fanout_to_keep if fotk not in fanout_to_prune]
 
         with torch.no_grad():
+            if self.masked:
+                new_mask_vector = Parameter(self.mask_vector[fanin_to_keep])
             new_weight = Parameter(self.weight[fanin_to_keep, :][:, fanout_to_keep])
             if self.bias is not None:
                 new_bias = Parameter(self.bias[fanin_to_keep])
             if not isinstance(self.batchnorm, nn.Identity) and self.batchnorm.weight is not None:
                 new_batchnorm_weight = Parameter(self.batchnorm.weight[fanout_to_keep])
                 new_batchnorm_bias = Parameter(self.batchnorm.bias[fanout_to_keep])
-
 
         if optimizer is not None:
             for group in optimizer.param_groups:
@@ -488,6 +518,12 @@ class ModConv2d(nn.Conv2d):
                                 opt_state_param.data = opt_state_param.data[fanin_to_keep]
                         optimizer.state[new_bias] = optimizer.state[param]
                         group['params'][index] = new_bias
+                    if self.masked and param is self.mask_vector:
+                        for (_, opt_state_param) in optimizer.state[param].items():
+                            if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.mask_vector.shape:
+                                opt_state_param.data = opt_state_param.data[fanin_to_keep]
+                        optimizer.state[new_mask_vector] = optimizer.state[param]
+                        group['params'][index] = new_mask_vector
                     if not isinstance(self.batchnorm, nn.Identity):
                         if self.batchnorm.weight is not None and param is self.batchnorm.weight:
                             for (_, opt_state_param) in optimizer.state[param].items():
@@ -505,14 +541,14 @@ class ModConv2d(nn.Conv2d):
         self.weight = new_weight
         if self.bias is not None:
             self.bias = new_bias
-
         if self.masked:
-            self.mask_vector.data = self.mask_vector.data[fanin_to_keep]
+            self.mask_vector = new_mask_vector
 
         self.out_channels = len(fanin_to_keep)
         self.in_channels = len(fanout_to_keep)
 
         if not isinstance(self.batchnorm, nn.Identity):
+            self.batchnorm.num_features = self.in_channels
             if self.batchnorm.running_mean is not None:
                 self.batchnorm.running_mean = self.batchnorm.running_mean[fanout_to_keep]
                 self.batchnorm.running_var = self.batchnorm.running_var[fanout_to_keep]
@@ -599,6 +635,7 @@ class ModConv2d(nn.Conv2d):
             self.in_channels = self.in_channels + new_in_channels
 
             if not isinstance(self.batchnorm, nn.Identity):
+                self.batchnorm.num_features = self.in_channels
                 if self.batchnorm.running_mean is not None:
                     self.batchnorm.running_mean = torch.cat(
                         (self.batchnorm.running_mean, torch.zeros(new_in_channels)))
