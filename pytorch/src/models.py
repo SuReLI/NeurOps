@@ -24,6 +24,7 @@ class ModSequential(nn.Sequential):
             for name, module in self.named_modules():
                 if isinstance(module, ModLinear) or isinstance(module, ModConv2d):
                     module.register_forward_hook(partial(self._act_hook, name))
+            self[0].register_forward_pre_hook(self._input_hook)
 
         modules = list(self._modules.values())
         self.conversion_layer = -1
@@ -60,6 +61,11 @@ class ModSequential(nn.Sequential):
         if self.activations[name].shape[0] > 2*self.activations[name].shape[1]:
             #self.activations[name] = self.activations[name][min(-2*self.activations[name].shape[1], output.shape[1]):]
             self.activations[name] = self.activations[name][-2*self.activations[name].shape[1]:]
+    
+    def _input_hook(self, module, input):
+        self.activations["-1"] = torch.cat((self.activations["-1"], input[0].detach()), dim=0)
+        if self.activations["-1"].shape[0] > 2*self.activations["-1"].shape[1]:
+            self.activations["-1"] = self.activations["-1"][-2*self.activations["-1"].shape[1]:]
     
     def _act_shape_hook(self, module, input, output):
         self.conv_output_shape = output.shape[1:]
@@ -137,24 +143,24 @@ class ModSequential(nn.Sequential):
 
     def grow(self, layer_index: int, newneurons: int = 0, fanin_weights=None, fanout_weights=None, 
              optimizer=None, clear_activations: bool = False, send_activations: bool = False):
-        for i, module in enumerate(self._modules.values()):
+        for i, module in enumerate(self):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.grow(newneurons, 0, fanin_weights = fanin_weights, optimizer=optimizer, 
-                activations=self.activations[str(layer_index-1)] if send_activations else None)
+                            activations=self.activations[str(layer_index-1)] if send_activations or fanin_weights == "iterative_orthogonalization" else None)
                 if self.track_activations:
                     if clear_activations:
                         self.activations[str(layer_index)] = torch.Tensor()
                     else:
                         self.activations[str(layer_index)] = torch.cat(
                             (self.activations[str(layer_index)], 
-                             torch.zeros(self.activations[str(layer_index)].shape[0], newneurons)), dim=1)
+                             torch.zeros(self.activations[str(layer_index)].shape[0], newneurons, *self.activations[str(layer_index)].shape[2:])), dim=1)
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 if i == self.conversion_layer:
                     converted_newneurons = newneurons*self.conversion_factor
                 else:
                     converted_newneurons = newneurons
                 module.grow(0, converted_newneurons, fanout_weights = fanout_weights, optimizer=optimizer, 
-                            activations=self[layer_index](self.activations[str(layer_index-1)]) if send_activations else None)
+                            activations=self.activations[str(layer_index)] if send_activations or fanout_weights == "iterative_orthogonalization" else None)
                 if clear_activations and self.track_activations:
                     self.activations[str(layer_index+1)] = torch.Tensor()
         if self.track_auxiliary_gradients:
