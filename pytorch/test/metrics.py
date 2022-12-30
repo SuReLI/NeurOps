@@ -64,6 +64,33 @@ class TestMetrics(unittest.TestCase):
         effdim4 = effective_rank(tensor=model.activations["0"], threshold=0.01, partial=False)
         self.assertTrue(effdim4 <= 7)
 
+        model = ModSequential(
+                ModConv2d(in_channels=1, out_channels=8, kernel_size=7, masked=True, padding=1),
+                ModConv2d(in_channels=8, out_channels=16, kernel_size=5, masked=True, padding = 1),
+                ModLinear(1024, 256, masked=True),
+                ModLinear(256, 10, masked=True),
+                track_activations=True,
+                track_auxiliary_gradients=True,
+                input_shape=(1, 14, 14)
+            )
+            
+        data = [torch.randn(16, 1, 14, 14) for _ in range(10)]
+        labels = [torch.randint(0, 10, (16,)) for _ in range(10)]
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+        criterion = torch.nn.CrossEntropyLoss()
+
+        for i in range(10):
+            optimizer.zero_grad()
+            x = data[i]
+            ytrue = labels[i]
+            y = model(x, auxiliaries=model.auxiliaries)
+            loss = criterion(y, ytrue)
+            loss.backward()
+            optimizer.step()
+
+        effdim = effective_rank(tensor=model.activations["0"], threshold=0.01, partial=False)
+        self.assertTrue(len(effdim) == 8)
+        
     def test_weight_sum(self):
         layer = ModLinear(2, 10, masked=True)
         layer.weight.data = torch.ones(10, 2)
@@ -77,6 +104,39 @@ class TestMetrics(unittest.TestCase):
         self.assertTrue(fanin[0] == 2)
         fanin_fro = weight_sum(layer.weight, fanin=True, p="fro")
         self.assertTrue(fanin_fro[0] < fanin[0])
+
+        model = ModSequential(
+                ModConv2d(in_channels=1, out_channels=8, kernel_size=7, masked=True, padding=1),
+                ModConv2d(in_channels=8, out_channels=16, kernel_size=5, masked=True, padding = 1),
+                ModLinear(1024, 256, masked=True),
+                ModLinear(256, 10, masked=True),
+                track_activations=True,
+                track_auxiliary_gradients=True,
+                input_shape=(1, 14, 14)
+            )
+            
+        data = [torch.randn(16, 1, 14, 14) for _ in range(10)]
+        labels = [torch.randint(0, 10, (16,)) for _ in range(10)]
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+        criterion = torch.nn.CrossEntropyLoss()
+
+        for i in range(10):
+            optimizer.zero_grad()
+            x = data[i]
+            ytrue = labels[i]
+            y = model(x, auxiliaries=model.auxiliaries)
+            loss = criterion(y, ytrue)
+            loss.backward()
+            optimizer.step()
+
+        fanout = weight_sum(model[1].weight, fanin=False)
+        fanin = weight_sum(model[0].weight, fanin=True)
+        self.assertTrue(len(fanout) == 8)
+        self.assertTrue(len(fanin) == 8)
+        fanout2 = weight_sum(model[2].weight, fanin=False, conversion_factor=model.conversion_factor)
+        fanin2 = weight_sum(model[1].weight, fanin=True)
+        self.assertTrue(len(fanin2) == 16)
+        self.assertTrue(len(fanout2) == 16)
     
     def test_activation_variance(self):
         model = ModSequential(

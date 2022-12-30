@@ -9,14 +9,16 @@ weights: weights of a layer
 p: p-norm to use (int, inf, -inf, "fro", "nuc")
 fanin: whether to measure w.r.t. fan-in weights (so output length is # of output neurons) or fan-out weights
 """
-def weight_sum(weights: torch.Tensor = None, p = 1, fanin: bool = True):
+def weight_sum(weights: torch.Tensor = None, p = 1, fanin: bool = True, conversion_factor: int = -1):
     if weights is None:
         return None
     if not fanin:
         weights = torch.transpose(weights, 0, 1)
     if len(weights.shape) > 2:
         weights = weights.reshape(weights.shape[0], -1)
-
+    if conversion_factor != -1:
+        weights = weights.reshape(-1, conversion_factor, *weights.shape[1:])
+        weights = weights.reshape(weights.shape[0], -1)
     return torch.norm(weights, p=p, dim=1)
 
 """
@@ -24,10 +26,11 @@ Measure variance of activations for each neuron in a layer, used by Polyak
 and Wolf (2015) to measure neuron importance
 """
 def activation_variance(activations: torch.Tensor = None):
+    print(activations.shape)
     if activations is None:
         return None
     if len(activations.shape) > 2:
-        activations = activations.reshape(activations.shape[0], -1)
+        activations = torch.transpose(torch.transpose(activations, 0, 1).reshape(activations.shape[1], -1), 0, 1)
     return torch.var(activations, dim=0)
 
 """
@@ -39,7 +42,7 @@ def effective_rank(tensor: torch.Tensor = None, threshold: float = 0.01,
     if tensor is None:
         return None
     if len(tensor.shape) > 2:
-        tensor = tensor.reshape(tensor.shape[0], -1) #TODO: check if this is correct for activations and weights
+        tensor = torch.transpose(torch.transpose(tensor, 0, 1).reshape(tensor.shape[1], -1), 0, 1)
     if scale:
         tensor = tensor.clone() / tensor.shape[1]**0.5
     _, S, _ = torch.svd(tensor, compute_uv=False)
