@@ -54,6 +54,9 @@ class ModSequential(nn.Sequential):
                                       modules[i-1].kernel_size[0], modules[i-1].kernel_size[1])
                 self.auxiliaries.append(nn.parameter.Parameter(aux))
 
+    def parameters(self, recurse: bool = True, include_mask = False):
+        return (p for name, p in self.named_parameters(recurse=recurse) if name != 'auxiliaries' and ("mask" not in name or include_mask))
+
     def _act_hook(self, name, module, input, output):
         self.activations[name] = torch.cat((self.activations[name], output.detach()), dim=0)
         if self.activations[name].shape[0] > 2*self.activations[name].shape[1]:
