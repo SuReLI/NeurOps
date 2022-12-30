@@ -79,7 +79,7 @@ class ModSequential(nn.Sequential):
 
     def forward(self, x, auxiliaries: list = None, layer_index: int = -1):
         old_x = x
-        modules = list(self._modules.values())
+        modules = list(self)
         for i, module in enumerate(modules):
             if i == 0 or auxiliaries is None:
                 x = module(x)
@@ -92,16 +92,15 @@ class ModSequential(nn.Sequential):
         return x
 
     def mask(self, layer_index: int, neurons: list = [], clear_activations: bool = False):
-        for i, module in enumerate(self._modules.values()):
+        for i, module in enumerate(self):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.mask(neurons)
         if clear_activations and self.track_activations:
             for index in (layer_index+1, layer_index):
                 self.activations[str(index)] = torch.Tensor()
 
-    
     def unmask(self, layer_index: int, neurons: list = [], optimizer=None, clear_activations: bool = False):
-        for i, module in enumerate(self._modules.values()):
+        for i, module in enumerate(self):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.unmask(neurons, [], optimizer=optimizer)
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
@@ -114,9 +113,8 @@ class ModSequential(nn.Sequential):
             for index in (layer_index+1, layer_index):
                 self.activations[str(index)] = torch.Tensor()
             
-
     def prune(self, layer_index: int, neurons: list = [], optimizer=None, clear_activations: bool = False):
-        for i, module in enumerate(self._modules.values()):
+        for i, module in enumerate(self):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.prune(neurons, [], optimizer=optimizer)
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
@@ -136,9 +134,7 @@ class ModSequential(nn.Sequential):
         if self.track_auxiliary_gradients:
             self.auxiliaries[layer_index-1] = self.auxiliaries[layer_index-1][:, neurons_to_keep]
             self.auxiliaries[layer_index-2] = self.auxiliaries[layer_index-2][neurons_to_keep]
-
-
-
+                
     def grow(self, layer_index: int, newneurons: int = 0, fanin_weights=None, fanout_weights=None, 
              optimizer=None, clear_activations: bool = False, send_activations: bool = False):
         for i, module in enumerate(self):
