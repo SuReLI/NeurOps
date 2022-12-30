@@ -89,7 +89,7 @@ class ModSequential(nn.Sequential):
             else:
                 x_copy = x
                 x = module(x, auxiliaries[i-1], old_x, modules[i-1])
-                old_x = x_copy * modules[i-1].mask_vector.view(1, -1)
+                old_x = x_copy * modules[i-1].mask_vector.view(1, -1, *[1 for dim in x_copy.shape[2:]])
             if i == layer_index:
                 return x
         return x
@@ -111,7 +111,7 @@ class ModSequential(nn.Sequential):
                     converted_neurons = sum([[*range(neuron*self.conversion_factor, (neuron+1)*self.conversion_factor)] for neuron in neurons], [])
                 else:
                     converted_neurons = neurons
-                module.unmask([], neurons, optimizer=optimizer)
+                module.unmask([], converted_neurons, optimizer=optimizer)
         if clear_activations and self.track_activations:
             for index in (layer_index+1, layer_index):
                 self.activations[str(index)] = torch.Tensor()
@@ -121,7 +121,7 @@ class ModSequential(nn.Sequential):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.prune(neurons, [], optimizer=optimizer)
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
-                if i == self.conversion_layer:
+                if i-1 == self.conversion_layer:
                     converted_neurons = sum([[*range(neuron*self.conversion_factor, (neuron+1)*self.conversion_factor)] for neuron in neurons], [])
                 else:
                     converted_neurons = neurons
@@ -135,6 +135,9 @@ class ModSequential(nn.Sequential):
                     ntk for ntk in neurons if ntk not in neurons]
                 self.activations[str(index)] = self.activations[str(index)][:, neurons_to_keep]
         if self.track_auxiliary_gradients:
+            neurons_to_keep = range(self.auxiliaries[layer_index-1].shape[1])
+            neurons_to_keep = [
+                ntk for ntk in neurons if ntk not in neurons]
             self.auxiliaries[layer_index-1] = self.auxiliaries[layer_index-1][:, neurons_to_keep]
             self.auxiliaries[layer_index-2] = self.auxiliaries[layer_index-2][neurons_to_keep]
                 
