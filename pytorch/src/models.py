@@ -12,7 +12,7 @@ from .layers import ModLinear, ModConv2d
 A modifiable sequential container that allows for masking, pruning, and growing of layers.
 """
 class ModSequential(nn.Sequential):
-    def __init__(self,  *args, track_activations: bool = False, track_auxiliary_gradients: bool = False, input_features: int = None, input_shape: tuple = None):
+    def __init__(self,  *args, track_activations: bool = False, track_auxiliary_gradients: bool = False, input_shape: tuple = None):
         
         super(ModSequential, self).__init__(*args)
 
@@ -26,21 +26,19 @@ class ModSequential(nn.Sequential):
                     module.register_forward_hook(partial(self._act_hook, name))
             self[0].register_forward_pre_hook(self._input_hook)
 
-        modules = list(self._modules.values())
+        modules = self.layers()
         self.conversion_layer = -1
         self.conversion_factor = 1
-        if input_shape is not None:
-            for i in range(len(modules)-1):
-                if isinstance(modules[i+1], nn.Linear) and isinstance(modules[i], nn.Conv2d):
-                    self.conversion_layer = i
-                    self.conversion_factor = prod(self(torch.zeros(1, *input_shape), layer_index=i).shape[1:])   
-
-        if input_features is None:
-            if isinstance(modules[0], nn.Linear):
-                input_features = modules[0].in_features
-            elif isinstance(modules[0], nn.Conv2d):
-                input_features = modules[0].in_channels
-        self.input_features = input_features
+        self.input_shape = input_shape
+        
+        for i in range(len(modules)-1):
+            if isinstance(modules[i+1], nn.Linear) and isinstance(modules[i], nn.Conv2d):
+                self.conversion_layer = i
+                modules[i+1].preflatten = nn.Flatten(start_dim=1)
+                if input_shape is not None:
+                    self.conversion_factor = prod(self(torch.zeros(1, *input_shape), layer_index=i).shape[2:])  
+                else:
+                    self.conversion_factor = modules[i+1].in_features // modules[i].out_channels
 
         if self.track_auxiliary_gradients:
             self.auxiliaries = []
@@ -52,7 +50,7 @@ class ModSequential(nn.Sequential):
                                       modules[i-1].kernel_size[0]+modules[i].kernel_size[0]-1, 
                                       modules[i-1].kernel_size[1]+modules[i].kernel_size[1]-1)
                 else:
-                    aux = torch.zeros(modules[i].out_features, modules[i-1].in_channels, 
+                    aux = torch.zeros(modules[i].out_features // self.conversion_factor, modules[i-1].in_channels, 
                                       modules[i-1].kernel_size[0], modules[i-1].kernel_size[1])
                 self.auxiliaries.append(nn.parameter.Parameter(aux))
 
