@@ -39,6 +39,39 @@ class TestModels(unittest.TestCase):
         y = model(x)
         self.assertEqual(model.activations['1'].shape[1], 6)
 
+        model = ModSequential(
+                ModConv2d(in_channels=1, out_channels=8, kernel_size=7, masked=True, padding=1),
+                ModConv2d(in_channels=8, out_channels=16, kernel_size=5, masked=True, padding = 1),
+                ModLinear(1024, 256, masked=True),
+                ModLinear(256, 10, masked=True),
+                track_activations=True,
+                track_auxiliary_gradients=True,
+                input_shape=(1, 14, 14)
+            )
+            
+        data = [torch.randn(16, 1, 14, 14) for _ in range(10)]
+        labels = [torch.randint(0, 10, (16,)) for _ in range(10)]
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+        criterion = torch.nn.CrossEntropyLoss()
+
+        for i in range(10):
+            optimizer.zero_grad()
+            x = data[i]
+            ytrue = labels[i]
+            y = model(x, auxiliaries=model.auxiliaries)
+            loss = criterion(y, ytrue)
+            loss.backward()
+            optimizer.step()
+
+        self.assertEqual(model.activations['0'].shape[1], 8)
+        self.assertEqual(model.activations['2'].shape[1], 256)
+        self.assertTrue(torch.allclose(model.auxiliaries[0], torch.zeros_like(model.auxiliaries[0])))
+        self.assertFalse(torch.allclose(model.auxiliaries[0].grad, torch.zeros_like(model.auxiliaries[0])))
+        self.assertEqual(model.auxiliaries[0].grad.shape[0], 16)
+        self.assertEqual(model.auxiliaries[2].grad.shape[0], 10)
+
+
+
     def test_modtransformer(self):
         config = transformers.BertConfig()
         model = transformers.BertForSequenceClassification(config)
