@@ -9,14 +9,21 @@ def kaiming_uniform(tensor: torch.Tensor, a: float = 5**(1/2), mode: str = 'fan_
     with torch.no_grad():
         return tensor.uniform_(-bound, bound)
 
-def iterative_orthogonalization(weights: torch.Tensor, input: torch.Tensor, stride: int = 1):
+def iterative_orthogonalization(weights: torch.Tensor, input: torch.Tensor, stride: int = 1, output_normalize: bool = False):
     if len(weights.shape) == 4:
         input = torch.nn.functional.unfold(input,kernel_size=weights.size(2),stride=stride)
         input = input.transpose(1,2)
         input = input.reshape(input.size(0)*input.size(1),input.size(2))
+    if len(input.shape) == 4 and len(weights.shape) == 2:
+        input = input.flatten(start_dim=1)
     numneurons = weights.size(0)
     u, s, v = torch.svd(input)
     weights = (u[:numneurons,:numneurons].mm(torch.diag(1/torch.sqrt(s[:numneurons]))).mm(v[:,:numneurons].t())).reshape(numneurons, *weights.shape[1:])
-    #TODO: normalize if needed
+    if output_normalize:
+        if len(weights.shape) == 4:
+            output = torch.nn.functional.conv2d(input, weights, stride=stride)
+        else:
+            output = input.mm(weights.t())
+        weights = weights / torch.norm(output)
     return weights
 

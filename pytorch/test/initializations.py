@@ -53,6 +53,35 @@ class TestInitializations(unittest.TestCase):
         self.assertTrue(torch.allclose(original2, model[1].weight.data[:,:8]))
         self.assertTrue(torch.allclose(model[1].weight.data[:,8:], torch.zeros([1,2,3,3])))
 
+        model = ModSequential(
+            ModConv2d(in_channels=1, out_channels=16, kernel_size=7, masked=True, padding=1, prebatchnorm=True, learnable_mask=True),
+            ModConv2d(in_channels=16, out_channels=16, kernel_size=5, masked=True, prebatchnorm=True, learnable_mask=True),
+            ModLinear(64, 10, masked=True, learnable_mask=True),
+            track_activations=True,
+            track_auxiliary_gradients=True,
+            input_shape = (1, 10, 10)
+        )
+        x = torch.randn(10, 1, 10, 10)
+        out = model(x)
+        H = x
+        for layer in model:
+            print(layer.weight.shape)
+            original = layer.weight.data
+            layer.weight.data = iterative_orthogonalization(layer.weight.data, H)
+            self.assertFalse(torch.allclose(original, layer.weight.data))
+            H = layer(H)
+        original1 = model[1].weight.data
+        original2 = model[2].weight.data
+        print("grow")
+        model.grow(1,2,"iterative_orthogonalization","iterative_orthogonalization", send_activations = True)
+        self.assertTrue(model[1].weight.size(0) == 18)
+        self.assertTrue(torch.allclose(original1, model[1].weight.data[:16]))
+        self.assertFalse(torch.allclose(model[1].weight.data[16:], torch.zeros([2,16,5,5])))
+        self.assertTrue(model[2].weight.size(1) == 72)
+        self.assertTrue(torch.allclose(original2, model[2].weight.data[:,:64]))
+        self.assertFalse(torch.allclose(model[2].weight.data[:,64:], torch.zeros([10,8])))
+        self.assertTrue(model[2].weight.size(0) == 10)
+
 
     def test_kaiming_uniform(self):
         model = ModSequential(
