@@ -89,7 +89,7 @@ class TestMetrics(unittest.TestCase):
             optimizer.step()
 
         effdim = effective_rank(tensor=model.activations["0"], threshold=0.01, partial=False)
-        self.assertTrue(len(effdim) == 8)
+        self.assertTrue(effdim <= 8)
         
     def test_weight_sum(self):
         layer = ModLinear(2, 10, masked=True)

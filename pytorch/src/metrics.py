@@ -26,7 +26,6 @@ Measure variance of activations for each neuron in a layer, used by Polyak
 and Wolf (2015) to measure neuron importance
 """
 def activation_variance(activations: torch.Tensor = None):
-    print(activations.shape)
     if activations is None:
         return None
     if len(activations.shape) > 2:
