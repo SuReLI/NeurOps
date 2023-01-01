@@ -26,32 +26,31 @@ class ModSequential(nn.Sequential):
                     module.register_forward_hook(partial(self._act_hook, name))
             self[0].register_forward_pre_hook(self._input_hook)
 
-        modules = self.layers()
         self.conversion_layer = -1
         self.conversion_factor = 1
         self.input_shape = input_shape
         
-        for i in range(len(modules)-1):
-            if isinstance(modules[i+1], nn.Linear) and isinstance(modules[i], nn.Conv2d):
+        for i in range(len(self)-1):
+            if isinstance(self[i+1], nn.Linear) and isinstance(self[i], nn.Conv2d):
                 self.conversion_layer = i
-                modules[i+1].preflatten = nn.Flatten(start_dim=1)
+                self[i+1].preflatten = nn.Flatten(start_dim=1)
                 if input_shape is not None:
                     self.conversion_factor = prod(self(torch.zeros(1, *input_shape), layer_index=i).shape[2:])  
                 else:
-                    self.conversion_factor = modules[i+1].in_features // modules[i].out_channels
+                    self.conversion_factor = self[i+1].in_features // self[i].out_channels
 
         if self.track_auxiliary_gradients:
             self.auxiliaries = []
-            for i in range(1, len(modules)):
-                if isinstance(modules[i-1], nn.Linear):
-                    aux = torch.zeros(modules[i].out_features, modules[i-1].in_features)
-                elif isinstance(modules[i], nn.Conv2d):
-                    aux = torch.zeros(modules[i].out_channels, modules[i-1].in_channels, 
-                                      modules[i-1].kernel_size[0]+modules[i].kernel_size[0]-1, 
-                                      modules[i-1].kernel_size[1]+modules[i].kernel_size[1]-1)
+            for i in range(1, len(self)):
+                if isinstance(self[i-1], nn.Linear):
+                    aux = torch.zeros(self[i].out_features, self[i-1].in_features)
+                elif isinstance(self[i], nn.Conv2d):
+                    aux = torch.zeros(self[i].out_channels, self[i-1].in_channels, 
+                                      self[i-1].kernel_size[0]+self[i].kernel_size[0]-1, 
+                                      self[i-1].kernel_size[1]+self[i].kernel_size[1]-1)
                 else:
-                    aux = torch.zeros(modules[i].out_features // self.conversion_factor, modules[i-1].in_channels, 
-                                      modules[i-1].kernel_size[0], modules[i-1].kernel_size[1])
+                    aux = torch.zeros(self[i].out_features // self.conversion_factor, self[i-1].in_channels, 
+                                      self[i-1].kernel_size[0], self[i-1].kernel_size[1])
                 self.auxiliaries.append(nn.parameter.Parameter(aux))
 
     def parameters(self, recurse: bool = True, include_mask = False):
@@ -82,14 +81,13 @@ class ModSequential(nn.Sequential):
 
     def forward(self, x, auxiliaries: list = None, layer_index: int = -1):
         old_x = x
-        modules = list(self)
-        for i, module in enumerate(modules):
+        for i, module in enumerate(self):
             if i == 0 or auxiliaries is None:
                 x = module(x)
             else:
                 x_copy = x
-                x = module(x, auxiliaries[i-1], old_x, modules[i-1])
-                old_x = x_copy * modules[i-1].mask_vector.view(1, -1, *[1 for dim in x_copy.shape[2:]])
+                x = module(x, auxiliaries[i-1], old_x, self[i-1])
+                old_x = x_copy * self[i-1].mask_vector.view(1, -1, *[1 for dim in x_copy.shape[2:]])
             if i == layer_index:
                 return x
         return x
@@ -155,7 +153,7 @@ class ModSequential(nn.Sequential):
                             (self.activations[str(layer_index)], 
                              torch.zeros(self.activations[str(layer_index)].shape[0], newneurons, *self.activations[str(layer_index)].shape[2:])), dim=1)
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
-                if i == self.conversion_layer:
+                if layer_index == self.conversion_layer:
                     converted_newneurons = newneurons*self.conversion_factor
                 else:
                     converted_newneurons = newneurons
@@ -165,9 +163,9 @@ class ModSequential(nn.Sequential):
                     self.activations[str(layer_index+1)] = torch.Tensor()
         if self.track_auxiliary_gradients:
             self.auxiliaries[layer_index-1] = torch.cat(
-                (self.auxiliaries[layer_index-1], torch.zeros(self.auxiliaries[layer_index-1].shape[0], newneurons, self.auxiliaries[layer_index-1].shape[2:])), dim=1)
+                (self.auxiliaries[layer_index-1], torch.zeros(self.auxiliaries[layer_index-1].shape[0], newneurons, *self.auxiliaries[layer_index-1].shape[2:])), dim=1)
             self.auxiliaries[layer_index-2] = torch.cat(
-                (self.auxiliaries[layer_index-2], torch.zeros(newneurons, self.auxiliaries[layer_index-1].shape[1:])), dim=0)
+                (self.auxiliaries[layer_index-2], torch.zeros(newneurons, *self.auxiliaries[layer_index-2].shape[1:])), dim=0)
            
 
 """
