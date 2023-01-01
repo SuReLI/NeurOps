@@ -261,7 +261,7 @@ class ModLinear(nn.Linear):
                     new_batchnorm_weight = Parameter(
                         torch.cat((self.batchnorm.weight.data, torch.ones(new_in_features)), dim=0))
                     new_batchnorm_bias = Parameter(
-                        torch.cat((self.batchnorm.bias.data, torch.zeros(new_in_features)), dim=0))
+                        torch.cat((self.batchnorm.bias.data, torch.zeros(new_in_features)), dim=0))                    
 
             if optimizer is not None:
                 for group in optimizer.param_groups:
@@ -322,6 +322,9 @@ class ModLinear(nn.Linear):
                 if self.bias is not None:
                     new_bias = Parameter(
                         torch.cat((self.bias.data, torch.zeros(new_out_features))))
+                if self.masked:
+                    new_mask_vector = Parameter(torch.cat(
+                        (self.mask_vector.data, torch.ones(new_out_features))))
 
             if optimizer is not None:
                 for group in optimizer.param_groups:
@@ -340,13 +343,19 @@ class ModLinear(nn.Linear):
                                         (opt_state_param.data, torch.zeros(new_out_features)))
                             optimizer.state[new_bias] = optimizer.state[param]
                             group['params'][index] = new_bias
+                        if self.masked and param is self.mask_vector:
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.mask_vector.shape:
+                                    opt_state_param.data = torch.cat(
+                                        (opt_state_param.data, torch.ones(new_out_features)))
+                            optimizer.state[new_mask_vector] = optimizer.state[param]
+                            group['params'][index] = new_mask_vector
 
             self.weight = new_weight
             if self.bias is not None:
                 self.bias = new_bias
             if self.masked:
-                self.mask_vector.data = torch.cat(
-                    (self.mask_vector.data, torch.ones(new_out_features)))
+                self.mask_vector.data = new_mask_vector
 
             self.out_features = self.out_features + new_out_features
 
@@ -668,6 +677,9 @@ class ModConv2d(nn.Conv2d):
             if self.bias is not None:
                 new_bias = nn.Parameter(
                     torch.cat((self.bias.data, torch.zeros(new_out_channels)), dim=0))
+            if self.masked:
+                new_mask_vector = nn.Parameter(torch.cat(
+                    (self.mask_vector, torch.ones(new_out_channels))))
 
             if optimizer is not None:
                 for group in optimizer.param_groups:
@@ -686,12 +698,18 @@ class ModConv2d(nn.Conv2d):
                                         (opt_state_param.data, torch.zeros(new_out_channels)))
                             optimizer.state[new_bias] = optimizer.state[param]
                             group['params'][index] = new_bias
+                        if self.masked and param is self.mask_vector:
+                            for (_, opt_state_param) in optimizer.state[param].items():
+                                if isinstance(opt_state_param, torch.Tensor) and opt_state_param.shape == self.mask_vector.shape:
+                                    opt_state_param.data = torch.cat(
+                                        (opt_state_param.data, torch.ones(new_out_channels)))
+                            optimizer.state[new_mask_vector] = optimizer.state[param]
+                            group['params'][index] = new_mask_vector
 
             self.weight = new_weight
             if self.bias is not None:
                 self.bias = new_bias
             if self.masked:
-                self.mask_vector.data = torch.cat(
-                    (self.mask_vector, torch.ones(new_out_channels)))
+                self.mask_vector = new_mask_vector
 
             self.out_channels = self.out_channels + new_out_channels
