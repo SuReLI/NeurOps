@@ -105,7 +105,7 @@ class ModSequential(nn.Sequential):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 module.unmask(neurons, [], optimizer=optimizer)
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
-                if i == self.conversion_layer:
+                if layer_index == self.conversion_layer:
                     converted_neurons = sum([[*range(neuron*self.conversion_factor, (neuron+1)*self.conversion_factor)] for neuron in neurons], [])
                 else:
                     converted_neurons = neurons
