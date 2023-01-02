@@ -2,13 +2,19 @@ import torch
 import torch.nn as nn
 import math
 
-def kaiming_uniform(tensor: torch.Tensor, a: float = 5**(1/2), mode: str = 'fan_in', nonlinearity: str = 'leaky_relu', fan: int = -1):
+"""
+Reimplements kaiming_uniform directly from pytorch, making it usuable for initializing new neurons within an existing layer.
+"""
+def kaiming_uniform(tensor: torch.Tensor, a: float = 5**(1/2), mode: str = 'fan_in', nonlinearity: str = 'relu', fan: int = -1):
     if fan == -1:
         fan = nn.init._calculate_correct_fan(tensor, mode)
     bound = nn.init.calculate_gain(nonlinearity, a) * math.sqrt(3.0/fan)
     with torch.no_grad():
         return tensor.uniform_(-bound, bound)
 
+"""
+Implementation of iterative orthogonal initialization from Daneshmand et al. (2021)
+"""
 def iterative_orthogonalization(weights: torch.Tensor, input: torch.Tensor, stride: int = 1, output_normalize: bool = False):
     if len(weights.shape) == 4:
         input = torch.nn.functional.unfold(input,kernel_size=weights.size(2),stride=stride)

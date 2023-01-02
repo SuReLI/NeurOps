@@ -53,15 +53,23 @@ class ModSequential(nn.Sequential):
                                       self[i-1].kernel_size[0], self[i-1].kernel_size[1])
                 self.auxiliaries.append(nn.parameter.Parameter(aux))
 
+    """
+    Redefines `parameters` to exclude the auxiliary matrices and optionally the masks.
+    """
     def parameters(self, recurse: bool = True, include_mask = False):
         return (p for name, p in self.named_parameters(recurse=recurse) if name != 'auxiliaries' and ("mask" not in name or include_mask))
 
+    """
+    Saves the activations of a layer to the activations dictionary.
+    """
     def _act_hook(self, name, module, input, output):
         self.activations[name] = torch.cat((self.activations[name], output.detach()), dim=0)
         if self.activations[name].shape[0] > 2*self.activations[name].shape[1]:
-            #self.activations[name] = self.activations[name][min(-2*self.activations[name].shape[1], output.shape[1]):]
             self.activations[name] = self.activations[name][-2*self.activations[name].shape[1]:]
     
+    """
+    Saves the input to the first layer to the activations dictionary.
+    """
     def _input_hook(self, module, input):
         self.activations["-1"] = torch.cat((self.activations["-1"], input[0].detach()), dim=0)
         if self.activations["-1"].shape[0] > 2*self.activations["-1"].shape[1]:
@@ -70,6 +78,9 @@ class ModSequential(nn.Sequential):
     def _act_shape_hook(self, module, input, output):
         self.conv_output_shape = output.shape[1:]
 
+    """
+    Returns the number of "effective" parameters in the model, optionally excluding the masks.
+    """
     def parameter_count(self, masked: bool = False):
         count = 0
         for i in range(len(self)):
@@ -92,6 +103,9 @@ class ModSequential(nn.Sequential):
                 return x
         return x
 
+    """
+    Masks neurons of a given layer, optionally clearing the activations of the layer and the following layer.
+    """
     def mask(self, layer_index: int, neurons: list = [], clear_activations: bool = False):
         for i, module in enumerate(self):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
@@ -100,6 +114,10 @@ class ModSequential(nn.Sequential):
             for index in (layer_index+1, layer_index):
                 self.activations[str(index)] = torch.Tensor()
 
+    """
+    Unmasks neurons of a given layer, optionally updating an optimizer and/or clearing the activations of the 
+    layer and the following layer.
+    """
     def unmask(self, layer_index: int, neurons: list = [], optimizer=None, clear_activations: bool = False):
         for i, module in enumerate(self):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
@@ -114,6 +132,10 @@ class ModSequential(nn.Sequential):
             for index in (layer_index+1, layer_index):
                 self.activations[str(index)] = torch.Tensor()
             
+    """
+    Prunes neurons of a given layer, optionally updating an optimizer and/or clearing the activations of the
+    layer and the following layer.
+    """
     def prune(self, layer_index: int, neurons: list = [], optimizer=None, clear_activations: bool = False):
         for i, module in enumerate(self):
             if i == layer_index and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
@@ -139,6 +161,10 @@ class ModSequential(nn.Sequential):
             self.auxiliaries[layer_index-1] = self.auxiliaries[layer_index-1][:, neurons_to_keep]
             self.auxiliaries[layer_index-2] = self.auxiliaries[layer_index-2][neurons_to_keep]
                 
+    """
+    Grows a given layer by a given number of neurons, optionally updating an optimizer and/or clearing the activations of the
+    layer and the following layer.
+    """
     def grow(self, layer_index: int, newneurons: int = 0, fanin_weights=None, fanout_weights=None, 
              optimizer=None, clear_activations: bool = False, send_activations: bool = False):
         for i, module in enumerate(self):
@@ -170,7 +196,7 @@ class ModSequential(nn.Sequential):
 
 """
 A wrapper for the HuggingFace Transformer model that allows for masking of attention heads and/or of 
-hidden neurons in the FFN layer of each transformer block.
+hidden neurons in the FFN layer of each transformer block, via hooks on top of the existing model class.
 """
 class ModTransformer(nn.Module):
     def __init__(self, model, track_activations: bool=False, track_auxiliary_gradients: bool=False):

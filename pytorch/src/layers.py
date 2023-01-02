@@ -572,13 +572,11 @@ class ModConv2d(nn.Conv2d):
         Add new_out_channels new channels to the layer (and new_in_channels new inputs to the layer), with 
         weights fanin_weights and fanout_weights respectively.
 
-        If fanin_weights and/or fanout_weights are None, they are initialized with zeros.
+        If fanin_weights and/or fanout_weights are None, they are initialized with zeros. If fanin_weights and/or fanout_weights are 1D 
+        tensors, they are expanded to 2D tensors with the appropriate number of neurons/inputs. If fanin_weights and/or fanout_weights is 
+        "kaiming", they are initialized with the Kaiming initialization. If fanin_weights and/or fanout_weights is 
+        "iterative_orthogonalization", they are initialized via iterative orthogonalization using the input. 
 
-        If fanin_weights and/or fanout_weights are 1D tensors, they are reshaped to 4D tensors
-        with the appropriate number of channels/inputs.
-
-        If fanin_weights and/or fanout_weights are str, they are initialized with the resepective 
-        initialization.
 
         new_out_channels: number of channels to add to this layer
         new_in_channels: number of inputs to add to this layer
