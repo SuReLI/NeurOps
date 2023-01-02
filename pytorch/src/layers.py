@@ -163,7 +163,7 @@ class ModLinear(nn.Linear):
             if self.bias is not None:
                 new_bias = Parameter(self.bias[fanin_to_keep])
             if self.masked:
-                new_mask_vector = Parameter(self.mask_vector[fanin_to_keep])
+                new_mask_vector = Parameter(self.mask_vector[fanin_to_keep], requires_grad=self.mask_vector.requires_grad)
             if not isinstance(self.batchnorm, nn.Identity) and self.batchnorm.weight is not None:
                 new_batchnorm_weight = Parameter(self.batchnorm.weight[fanout_to_keep])
                 new_batchnorm_bias = Parameter(self.batchnorm.bias[fanout_to_keep])
@@ -226,18 +226,15 @@ class ModLinear(nn.Linear):
         Add new_out_features new neurons to the layer (and new_in_features new inputs to the layer), with 
         weights fanin_weights and fanout_weights respectively.
 
-        If fanin_weights and/or fanout_weights are None, they are initialized with zeros.
-
-        If fanin_weights and/or fanout_weights are 1D tensors, they are expanded to 2D tensors
-        with the appropriate number of neurons/inputs.
-
-        If fanin_weights and/or fanout_weights is "kaiming", they are initialized with the
-        Kaiming initialization.
+        If fanin_weights and/or fanout_weights are None, they are initialized with zeros. If fanin_weights and/or fanout_weights are 1D 
+        tensors, they are expanded to 2D tensors with the appropriate number of neurons/inputs. If fanin_weights and/or fanout_weights is 
+        "kaiming", they are initialized with the Kaiming initialization. If fanin_weights and/or fanout_weights is 
+        "iterative_orthogonalization", they are initialized via iterative orthogonalization using the input. 
 
         new_out_features: number of neurons to add to this layer
         new_in_features: number of inputs to add to this layer
-        fanin_weights: weights of the new neurons
-        fanout_weights: weights of the new inputs (adding neurons to the previous layer)
+        fanin_weights: weights of the new neurons in this layer
+        fanout_weights: weights of the new inputs (adding neurons to the previous layer, so initializing their fanout weights)
         optimizer: optimizer to update to new shape of the layer
     """
 
@@ -272,6 +269,7 @@ class ModLinear(nn.Linear):
                                     opt_state_param.data = torch.cat(
                                         (opt_state_param.data, torch.zeros_like(fanout_weights)), dim=1)
                             optimizer.state[new_weight] = optimizer.state[param]
+                            del optimizer.state[param]
                             group['params'][index] = new_weight
                         if not isinstance(self.batchnorm, nn.Identity):
                             if self.batchnorm.weight is not None and param is self.batchnorm.weight:
@@ -280,6 +278,7 @@ class ModLinear(nn.Linear):
                                         opt_state_param.data = torch.cat(
                                             (opt_state_param.data, torch.ones(new_in_features)), dim=1)
                                 optimizer.state[new_batchnorm_weight] = optimizer.state[param]
+                                del optimizer.state[param]
                                 group['params'][index] = new_batchnorm_weight
                             if self.batchnorm.bias is not None and param is self.batchnorm.bias:
                                 for (_, opt_state_param) in optimizer.state[param].items():
@@ -287,6 +286,7 @@ class ModLinear(nn.Linear):
                                         opt_state_param.data = torch.cat(
                                             (opt_state_param.data, torch.ones(new_in_features)), dim=1)
                                 optimizer.state[new_batchnorm_bias] = optimizer.state[param]
+                                del optimizer.state[param]
                                 group['params'][index] = new_batchnorm_bias
 
             self.weight = new_weight
@@ -324,7 +324,7 @@ class ModLinear(nn.Linear):
                         torch.cat((self.bias.data, torch.zeros(new_out_features))))
                 if self.masked:
                     new_mask_vector = Parameter(torch.cat(
-                        (self.mask_vector.data, torch.ones(new_out_features))))
+                        (self.mask_vector.data, torch.ones(new_out_features))), requires_grad=self.mask_vector.requires_grad)
 
             if optimizer is not None:
                 for group in optimizer.param_groups:
@@ -335,6 +335,7 @@ class ModLinear(nn.Linear):
                                     opt_state_param.data = torch.cat(
                                         (opt_state_param.data, torch.zeros_like(fanin_weights)), dim=0)
                             optimizer.state[new_weight] = optimizer.state[param]
+                            del optimizer.state[param]
                             group['params'][index] = new_weight
                         if self.bias is not None and param is self.bias:
                             for (_, opt_state_param) in optimizer.state[param].items():
@@ -342,6 +343,7 @@ class ModLinear(nn.Linear):
                                     opt_state_param.data = torch.cat(
                                         (opt_state_param.data, torch.zeros(new_out_features)))
                             optimizer.state[new_bias] = optimizer.state[param]
+                            del optimizer.state[param]
                             group['params'][index] = new_bias
                         if self.masked and param is self.mask_vector:
                             for (_, opt_state_param) in optimizer.state[param].items():
@@ -349,6 +351,7 @@ class ModLinear(nn.Linear):
                                     opt_state_param.data = torch.cat(
                                         (opt_state_param.data, torch.ones(new_out_features)))
                             optimizer.state[new_mask_vector] = optimizer.state[param]
+                            del optimizer.state[param]
                             group['params'][index] = new_mask_vector
 
             self.weight = new_weight
@@ -503,7 +506,7 @@ class ModConv2d(nn.Conv2d):
 
         with torch.no_grad():
             if self.masked:
-                new_mask_vector = Parameter(self.mask_vector[fanin_to_keep])
+                new_mask_vector = Parameter(self.mask_vector[fanin_to_keep], requires_grad=self.mask_vector.requires_grad)
             new_weight = Parameter(self.weight[fanin_to_keep, :][:, fanout_to_keep])
             if self.bias is not None:
                 new_bias = Parameter(self.bias[fanin_to_keep])
@@ -672,14 +675,14 @@ class ModConv2d(nn.Conv2d):
             elif isinstance(fanin_weights, torch.Tensor) and len(fanin_weights.shape) == 3:
                 fanin_weights = fanin_weights.unsqueeze(1)
 
-            new_weight = nn.Parameter(
+            new_weight = Parameter(
                 torch.cat((self.weight.data, fanin_weights), dim=0))
             if self.bias is not None:
-                new_bias = nn.Parameter(
+                new_bias = Parameter(
                     torch.cat((self.bias.data, torch.zeros(new_out_channels)), dim=0))
             if self.masked:
-                new_mask_vector = nn.Parameter(torch.cat(
-                    (self.mask_vector, torch.ones(new_out_channels))))
+                new_mask_vector = Parameter(torch.cat(
+                    (self.mask_vector, torch.ones(new_out_channels))), requires_grad=self.mask_vector.requires_grad)
 
             if optimizer is not None:
                 for group in optimizer.param_groups:
