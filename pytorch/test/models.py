@@ -85,7 +85,6 @@ class TestModels(unittest.TestCase):
             modmodel.mask_neurons(layer, range(128))
         _ = modmodel(x)
         self.assertTrue(torch.allclose(modmodel.head_activations[2][10:20,:2,0,0], torch.zeros(10,2)))
-        #print(modmodel.neuron_activations[2][10:20,0,:10])
         self.assertTrue(torch.allclose(modmodel.neuron_activations[2][10:20,:,:128], torch.zeros(10,20,128)))
         
 

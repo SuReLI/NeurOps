@@ -65,14 +65,12 @@ class TestInitializations(unittest.TestCase):
         out = model(x)
         H = x
         for layer in model:
-            print(layer.weight.shape)
             original = layer.weight.data
             layer.weight.data = iterative_orthogonalization(layer.weight.data, H)
             self.assertFalse(torch.allclose(original, layer.weight.data))
             H = layer(H)
         original1 = model[1].weight.data
         original2 = model[2].weight.data
-        print("grow")
         model.grow(1,2,"iterative_orthogonalization","iterative_orthogonalization", send_activations = True)
         self.assertTrue(model[1].weight.size(0) == 18)
         self.assertTrue(torch.allclose(original1, model[1].weight.data[:16]))
