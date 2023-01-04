@@ -2,9 +2,9 @@ import unittest
 import torch
 import sys
 sys.path.append('.')
-from pytorch.src.models import *
-from pytorch.src.layers import *
-from pytorch.src.metrics import *
+from pytorch.neurops.models import *
+from pytorch.neurops.layers import *
+from pytorch.neurops.metrics import *
 
 
 class TestMetrics(unittest.TestCase):

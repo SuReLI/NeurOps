@@ -2,7 +2,7 @@ import unittest
 import torch
 import sys
 sys.path.append('.')
-from pytorch.src.layers import *
+from pytorch.neurops.layers import *
 
 
 class TestLayers(unittest.TestCase):

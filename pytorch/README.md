@@ -1,6 +1,6 @@
 This directory contains the PyTorch implementation of NeurOps. 
 
-Source code is found in the 'src' directory:
+Source code is found in the 'neurops' directory:
 
 `layers.py`: `ModLinear` and `ModConv2d` respectfully extend standard `nn.Linear` and `nn.Conv2d` to also enable masking, growing, and pruning, including auxiliary gradient matrix calculation, activation tracking, pre/post layer operations such as nonlinearities and layer normalization. 
 

@@ -2,9 +2,9 @@ import unittest
 import torch
 import sys
 sys.path.append('.')
-from pytorch.src.layers import *
-from pytorch.src.models import *
-from pytorch.src.initializations import *
+from pytorch.neurops.layers import *
+from pytorch.neurops.models import *
+from pytorch.neurops.initializations import *
 
 class TestInitializations(unittest.TestCase):
     def test_iterative_orthogonalization(self):

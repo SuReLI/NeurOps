@@ -3,8 +3,8 @@ import torch
 import transformers
 import sys
 sys.path.append('.')
-from pytorch.src.models import *
-from pytorch.src.layers import *
+from pytorch.neurops.models import *
+from pytorch.neurops.layers import *
 
 
 class TestModels(unittest.TestCase):
