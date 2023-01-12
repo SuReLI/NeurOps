@@ -24,6 +24,7 @@ class ModSequential(nn.Sequential):
             for name, module in self.named_modules():
                 if isinstance(module, ModLinear) or isinstance(module, ModConv2d):
                     module.register_forward_hook(partial(self._act_hook, name))
+                    #self.activations[name]
             self[0].register_forward_pre_hook(self._input_hook)
 
         self.conversion_layer = -1
@@ -63,7 +64,7 @@ class ModSequential(nn.Sequential):
     Saves the activations of a layer to the activations dictionary.
     """
     def _act_hook(self, name, module, input, output):
-        self.activations[name] = torch.cat((self.activations[name], output.detach()), dim=0)
+        self.activations[name] = torch.cat((self.activations[name], output.cpu()), dim=0)
         if self.activations[name].shape[0] > 2*self.activations[name].shape[1]:
             self.activations[name] = self.activations[name][-2*self.activations[name].shape[1]:]
     
@@ -71,7 +72,7 @@ class ModSequential(nn.Sequential):
     Saves the input to the first layer to the activations dictionary.
     """
     def _input_hook(self, module, input):
-        self.activations["-1"] = torch.cat((self.activations["-1"], input[0].detach()), dim=0)
+        self.activations["-1"] = torch.cat((self.activations["-1"], input[0].cpu()), dim=0)
         if self.activations["-1"].shape[0] > 2*self.activations["-1"].shape[1]:
             self.activations["-1"] = self.activations["-1"][-2*self.activations["-1"].shape[1]:]
     
@@ -114,7 +115,7 @@ class ModSequential(nn.Sequential):
                 module.mask(neurons)
         if clear_activations and self.track_activations:
             for index in (layer_index+1, layer_index):
-                self.activations[str(index)] = torch.Tensor()
+                self.activations[str(index)] = torch.Tensor().to(self.activations[str(index)].device)
 
     """
     Unmasks neurons of a given layer, optionally updating an optimizer and/or clearing the activations of the 
@@ -132,7 +133,7 @@ class ModSequential(nn.Sequential):
                 module.unmask([], converted_neurons, optimizer=optimizer)
         if clear_activations and self.track_activations:
             for index in (layer_index+1, layer_index):
-                self.activations[str(index)] = torch.Tensor()
+                self.activations[str(index)] = torch.Tensor().to(self.activations[str(index)].device)
             
     """
     Prunes neurons of a given layer, optionally updating an optimizer and/or clearing the activations of the
@@ -150,7 +151,7 @@ class ModSequential(nn.Sequential):
                 module.prune([], converted_neurons, optimizer=optimizer)
         for index in (layer_index+1, layer_index):
             if clear_activations and self.track_activations:
-                self.activations[str(index)] = torch.Tensor()
+                self.activations[str(index)] = torch.Tensor().to(self.activations[str(index)].device)
             elif index == layer_index and self.track_activations and len(self.activations[str(index)].shape) >= 2:
                 neurons_to_keep = range(self.activations[str(index)].shape[1])
                 neurons_to_keep = [
@@ -175,11 +176,11 @@ class ModSequential(nn.Sequential):
                             activations=self.activations[str(layer_index-1)] if send_activations or fanin_weights == "iterative_orthogonalization" else None)
                 if self.track_activations:
                     if clear_activations:
-                        self.activations[str(layer_index)] = torch.Tensor()
+                        self.activations[str(layer_index)] = torch.Tensor().to(self.activations[str(layer_index)].device)
                     else:
                         self.activations[str(layer_index)] = torch.cat(
                             (self.activations[str(layer_index)], 
-                             torch.zeros(self.activations[str(layer_index)].shape[0], newneurons, *self.activations[str(layer_index)].shape[2:])), dim=1)
+                             torch.zeros(self.activations[str(layer_index)].shape[0], newneurons, *self.activations[str(layer_index)].shape[2:]).to(self.activations[str(layer_index)].device)), dim=1)
             elif i == layer_index+1 and (isinstance(module, ModLinear) or isinstance(module, ModConv2d)):
                 if layer_index == self.conversion_layer:
                     converted_newneurons = newneurons*self.conversion_factor
@@ -188,7 +189,7 @@ class ModSequential(nn.Sequential):
                 module.grow(0, converted_newneurons, fanout_weights = fanout_weights, optimizer=optimizer, 
                             activations=self.activations[str(layer_index)] if send_activations or fanout_weights == "iterative_orthogonalization" else None)
                 if clear_activations and self.track_activations:
-                    self.activations[str(layer_index+1)] = torch.Tensor()
+                    self.activations[str(layer_index+1)] = torch.Tensor().to(self.activations[str(layer_index+1)].device)
         if self.track_auxiliary_gradients:
             self.auxiliaries[layer_index-1] = torch.cat(
                 (self.auxiliaries[layer_index-1], torch.zeros(self.auxiliaries[layer_index-1].shape[0], newneurons, *self.auxiliaries[layer_index-1].shape[2:])), dim=1)
