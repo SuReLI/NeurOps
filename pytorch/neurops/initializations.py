@@ -16,6 +16,7 @@ def kaiming_uniform(tensor: torch.Tensor, a: float = 5**(1/2), mode: str = 'fan_
 Implementation of iterative orthogonal initialization from Daneshmand et al. (2021)
 """
 def iterative_orthogonalization(weights: torch.Tensor, input: torch.Tensor, stride: int = 1, output_normalize: bool = False):
+    print(weights.shape)
     if len(weights.shape) == 4:
         input = torch.nn.functional.unfold(input,kernel_size=weights.size(2),stride=stride)
         input = input.transpose(1,2)
@@ -24,7 +25,8 @@ def iterative_orthogonalization(weights: torch.Tensor, input: torch.Tensor, stri
         input = input.flatten(start_dim=1)
     numneurons = weights.size(0)
     u, s, v = torch.svd(input)
-    weights = (u[:numneurons,:numneurons].mm(torch.diag(1/torch.sqrt(s[:numneurons]))).mm(v[:,:numneurons].t())).reshape(numneurons, *weights.shape[1:])
+    print(u[:numneurons,:numneurons].mm(torch.diag(1/torch.sqrt(s[:numneurons]))).mm(v[:,:numneurons].t()).shape)
+    weights = (u[:numneurons,:numneurons].mm(torch.diag(1/torch.sqrt(s[:numneurons]))).mm(v[:,:numneurons].t())).reshape(-1, *weights.shape[1:])
     if output_normalize:
         if len(weights.shape) == 4:
             output = torch.nn.functional.conv2d(input, weights, stride=stride)
