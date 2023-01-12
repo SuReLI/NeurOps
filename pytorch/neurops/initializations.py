@@ -5,7 +5,7 @@ import math
 """
 Reimplements kaiming_uniform directly from pytorch, making it usuable for initializing new neurons within an existing layer.
 """
-def kaiming_uniform(tensor: torch.Tensor, a: float = 5**(1/2), mode: str = 'fan_in', nonlinearity: str = 'relu', fan: int = -1):
+def kaiming_uniform(tensor: torch.Tensor, a: float = math.sqrt(5.0), mode: str = 'fan_in', nonlinearity: str = 'leaky_relu', fan: int = -1):
     if fan == -1:
         fan = nn.init._calculate_correct_fan(tensor, mode)
     bound = nn.init.calculate_gain(nonlinearity, a) * math.sqrt(3.0/fan)
@@ -16,7 +16,6 @@ def kaiming_uniform(tensor: torch.Tensor, a: float = 5**(1/2), mode: str = 'fan_
 Implementation of iterative orthogonal initialization from Daneshmand et al. (2021)
 """
 def iterative_orthogonalization(weights: torch.Tensor, input: torch.Tensor, stride: int = 1, output_normalize: bool = False):
-    print(weights.shape)
     if len(weights.shape) == 4:
         input = torch.nn.functional.unfold(input,kernel_size=weights.size(2),stride=stride)
         input = input.transpose(1,2)
@@ -25,7 +24,6 @@ def iterative_orthogonalization(weights: torch.Tensor, input: torch.Tensor, stri
         input = input.flatten(start_dim=1)
     numneurons = weights.size(0)
     u, s, v = torch.svd(input)
-    print(u[:numneurons,:numneurons].mm(torch.diag(1/torch.sqrt(s[:numneurons]))).mm(v[:,:numneurons].t()).shape)
     weights = (u[:numneurons,:numneurons].mm(torch.diag(1/torch.sqrt(s[:numneurons]))).mm(v[:,:numneurons].t())).reshape(-1, *weights.shape[1:])
     if output_normalize:
         if len(weights.shape) == 4:
