@@ -60,7 +60,7 @@ def orthogonality_gap(activations: torch.Tensor = None):
     if len(activations.shape) > 2:
        activations = activations.reshape(activations.shape[0], -1)
     cov = activations @ activations.t()
-    return torch.norm(cov*torch.trace(cov) - torch.eye(activations.shape[0]).to(cov.device)/activations.shape[0], p='fro')
+    return torch.norm(cov/(torch.norm(activations)**2) - torch.eye(activations.shape[0]).to(cov.device)/activations.shape[0], p='fro')
 
 
 """
