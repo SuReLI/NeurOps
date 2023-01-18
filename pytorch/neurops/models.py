@@ -10,9 +10,14 @@ from .layers import ModLinear, ModConv2d
 
 """
 A modifiable sequential container that allows for masking, pruning, and growing of layers.
+
+track_activations: don't track activations if false or 0, else keep input & activation buffer with size 
+                   equal to track_activations (2 if true) times dimensionality of layer
+track_auxiliary_gradients: don't track auxiliary gradients if false or 0, else compute auxiliary matrices for aux gradients
+input_shape: shape of input to model, used to compute conversion factor for linear layers
 """
 class ModSequential(nn.Sequential):
-    def __init__(self,  *args, track_activations: bool = False, track_auxiliary_gradients: bool = False, input_shape: tuple = None):
+    def __init__(self,  *args, track_activations: False, track_auxiliary_gradients: bool = False, input_shape: tuple = None):
         
         super(ModSequential, self).__init__(*args)
 
@@ -20,11 +25,11 @@ class ModSequential(nn.Sequential):
         self.track_auxiliary_gradients = track_auxiliary_gradients
 
         if self.track_activations:
+            self.multiplier = 2 if isinstance(self.track_activations, bool) else self.track_activations
             self.activations = defaultdict(torch.Tensor)
             for name, module in self.named_modules():
                 if isinstance(module, ModLinear) or isinstance(module, ModConv2d):
                     module.register_forward_hook(partial(self._act_hook, name))
-                    #self.activations[name]
             self[0].register_forward_pre_hook(self._input_hook)
 
         self.conversion_layer = -1
@@ -65,16 +70,16 @@ class ModSequential(nn.Sequential):
     """
     def _act_hook(self, name, module, input, output):
         self.activations[name] = torch.cat((self.activations[name], output.cpu()), dim=0)
-        if self.activations[name].shape[0] > 2*self.activations[name].shape[1]:
-            self.activations[name] = self.activations[name][-2*self.activations[name].shape[1]:]
+        if self.activations[name].shape[0] > self.multiplier*self.activations[name].shape[1]:
+            self.activations[name] = self.activations[name][-self.multiplier*self.activations[name].shape[1]:]
     
     """
     Saves the input to the first layer to the activations dictionary.
     """
     def _input_hook(self, module, input):
         self.activations["-1"] = torch.cat((self.activations["-1"], input[0].cpu()), dim=0)
-        if self.activations["-1"].shape[0] > 2*self.activations["-1"].shape[1]:
-            self.activations["-1"] = self.activations["-1"][-2*self.activations["-1"].shape[1]:]
+        if self.activations["-1"].shape[0] > self.multiplier*self.activations["-1"].shape[1]:
+            self.activations["-1"] = self.activations["-1"][-self.multiplier*self.activations["-1"].shape[1]:]
     
     def _act_shape_hook(self, module, input, output):
         self.conv_output_shape = output.shape[1:]
