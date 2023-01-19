@@ -69,9 +69,16 @@ computation
 Used by Maile et al. (2022) for selection of neurogenesis initialization candidates
 """
 def svd_score(tensor: torch.Tensor = None, threshold: float = 0.01, addwhole: bool = False, 
-             scale: bool = True):
+             scale: bool = True, difference: bool = False):
     if tensor is None:
         return None
+    if difference:
+        _, S, _ = torch.svd(tensor, compute_uv=False)
+        baseeffdim = torch.sum(S)
+        if addwhole:
+            baseeffdim += torch.count_nonzero(S > threshold).float()
+    else:
+        baseeffdim = 0
     scores = torch.zeros(tensor.shape[1])
     for neuron in range(tensor.shape[1]):
         prunedtensor = torch.cat((tensor[:, :neuron], tensor[:, neuron+1:]), dim=1)
@@ -83,7 +90,7 @@ def svd_score(tensor: torch.Tensor = None, threshold: float = 0.01, addwhole: bo
         effdim = torch.sum(S)
         if addwhole:
             effdim += torch.count_nonzero(S > threshold).float()
-        scores[neuron] = effdim
+        scores[neuron] = effdim-baseeffdim
     return scores
 
 """
