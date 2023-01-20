@@ -9,7 +9,7 @@ from .initializations import *
 """
 class ModLinear(nn.Linear):
     def __init__(self, in_features: int, out_features: int, bias: bool = True, masked: bool = False,
-                 learnable_mask: bool = False, nonlinearity: str = 'relu', prebatchnorm: bool = False, 
+                 learnable_mask: bool = False, nonlinearity = 'relu', prebatchnorm: bool = False, 
                  preflatten: bool = False):
 
         super().__init__(in_features, out_features, bias)
@@ -25,7 +25,7 @@ class ModLinear(nn.Linear):
         elif nonlinearity == '':
             self.nonlinearity = nn.Identity()
         else:
-            raise ValueError('Nonlinearity not supported')
+            self.nonlinearity = nonlinearity
 
         if prebatchnorm:
             self.batchnorm = nn.BatchNorm1d(self.in_features)
@@ -79,8 +79,8 @@ class ModLinear(nn.Linear):
                 old_x = nn.Flatten(start_dim=1)(old_x)
             auxout =  nn.functional.linear(previous.batchnorm(old_x), aux)
         elif isinstance(previous, nn.Conv2d):
-            auxout = nn.Flatten(start_dim=1)(nn.functional.conv2d(previous.batchnorm(old_x), aux, 
-                                              padding=previous.padding))
+            auxout = nn.Flatten(start_dim=1)(previous.postpool(nn.functional.conv2d(previous.batchnorm(old_x), aux, 
+                                              padding=previous.padding)))
         if self.masked:
             auxout = auxout * self.mask_vector.view(1, -1)
         return self.nonlinearity(out + auxout)
@@ -366,8 +366,8 @@ class ModLinear(nn.Linear):
     A modifiable version of Conv2D that can increase or decrease channel count and/or be masked
 """
 class ModConv2d(nn.Conv2d):
-    def __init__(self, masked: bool = False, bias: bool = True, learnable_mask: bool = False, nonlinearity: str = 'relu',
-                 prebatchnorm: bool = False, *args, **kwargs):
+    def __init__(self, masked: bool = False, bias: bool = True, learnable_mask: bool = False, nonlinearity = 'relu',
+                 prebatchnorm: bool = False, postpool = None, *args, **kwargs):
 
         super().__init__(bias=bias, *args, **kwargs)
 
@@ -380,15 +380,20 @@ class ModConv2d(nn.Conv2d):
 
         if nonlinearity == 'relu':
             self.nonlinearity = nn.ReLU()
-        elif nonlinearity == '':
+        elif nonlinearity == '' or nonlinearity is None:
             self.nonlinearity = nn.Identity()
         else:
-            raise ValueError('Nonlinearity not supported')
+            self.nonlinearity = nonlinearity
 
         if prebatchnorm:
             self.batchnorm = nn.BatchNorm2d(self.in_channels)
         else:
             self.batchnorm = nn.Identity()
+
+        if postpool is not None:
+            self.postpool = postpool
+        else:
+            self.postpool = nn.Identity()
 
     def weightparameters(self):
         if self.bias is not None:
@@ -426,9 +431,12 @@ class ModConv2d(nn.Conv2d):
         out = nn.functional.conv2d(self.batchnorm(x), self.get_weights(), self.get_biases(), self.stride, 
                                    self.padding, self.dilation, self.groups)
         if aux is None:
-            return self.nonlinearity(out)
-        return self.nonlinearity(out + nn.functional.conv2d(previous.batchnorm(old_x), aux,  
-                                 padding=[prev+curr for prev,curr in zip(previous.padding,self.padding)]))
+            return self.postpool(self.nonlinearity(out))
+        stride = [(s1 + s2) if ((s1 > 1) and (s2 > 1)) else (s1 + s2 -1)
+                 for s1, s2 in zip(previous.stride, self.stride)]
+        padding = [p1 + p2 for p1, p2 in zip(previous.padding, self.padding)]
+        return self.postpool(self.nonlinearity(out + previous.postpool(nn.functional.conv2d(previous.batchnorm(old_x), aux,  
+                                                                                            padding=padding, stride=stride))))
 
 
     """

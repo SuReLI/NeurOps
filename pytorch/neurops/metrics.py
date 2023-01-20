@@ -51,7 +51,7 @@ def effective_rank(tensor: torch.Tensor = None, threshold: float = 0.01,
     return effdim
 
 """
-Measure orthogonality gap of activations
+Measure orthogonality gap of activations. Score of 0 means completely orthogonal, score of 1 means completely redundant
 Used by Daneshmand et al. (2021)
 """
 def orthogonality_gap(activations: torch.Tensor = None):

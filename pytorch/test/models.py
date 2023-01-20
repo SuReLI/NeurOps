@@ -70,6 +70,36 @@ class TestModels(unittest.TestCase):
         self.assertEqual(model.auxiliaries[0].grad.shape[0], 16)
         self.assertEqual(model.auxiliaries[2].grad.shape[0], 10)
 
+        model = ModSequential(
+                ModConv2d(in_channels=3, out_channels=8, kernel_size=3, padding=1, masked=True, postpool=torch.nn.MaxPool2d(2,2)),
+                ModConv2d(in_channels=8, out_channels=16, kernel_size=3, padding=1, masked=True, postpool=torch.nn.MaxPool2d(2,2)),
+                ModLinear(1024, 256, masked=True),
+                ModLinear(256, 10, masked=True),
+                track_activations=True,
+                track_auxiliary_gradients=True,
+                input_shape=(3, 32, 32)
+            )
+                    
+        data = [torch.randn(16, 3, 32, 32) for _ in range(10)]
+        labels = [torch.randint(0, 10, (16,)) for _ in range(10)]
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+        criterion = torch.nn.CrossEntropyLoss()
+
+        for i in range(10):
+            optimizer.zero_grad()
+            x = data[i]
+            ytrue = labels[i]
+            y = model(x, auxiliaries=model.auxiliaries)
+            loss = criterion(y, ytrue)
+            loss.backward()
+            optimizer.step()
+
+        self.assertEqual(model.activations['0'].shape[1], 8)
+        self.assertEqual(model.activations['2'].shape[1], 256)
+        self.assertTrue(torch.allclose(model.auxiliaries[0], torch.zeros_like(model.auxiliaries[0])))
+        self.assertFalse(torch.allclose(model.auxiliaries[0].grad, torch.zeros_like(model.auxiliaries[0])))
+        self.assertEqual(model.auxiliaries[0].grad.shape[0], 16)
+        self.assertEqual(model.auxiliaries[2].grad.shape[0], 10)
 
 
     def test_modtransformer(self):
