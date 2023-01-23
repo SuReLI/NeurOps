@@ -91,7 +91,7 @@ class ModSequential(nn.Sequential):
         count = 0
         for i in range(len(self)):
             if isinstance(self[i], ModLinear) or isinstance(self[i], ModConv2d):
-                count += self[i].parameter_count(masked=masked, previous_mask = None if i == 0 else 
+                count += self[i].parameter_count(masked=masked, previous_mask = None if i == 0 or not self[i-1].masked else 
                                                  self[i-1].mask_vector if i-1 != self.conversion_layer else 
                                                  self[i-1].mask_vector.view(1,-1).tile(self.conversion_factor,1).view(-1))
             else:
