@@ -357,7 +357,7 @@ class ModLinear(nn.Linear):
             if self.bias is not None:
                 self.bias = new_bias
             if self.masked:
-                self.mask_vector.data = new_mask_vector
+                self.mask_vector = new_mask_vector
 
             self.out_features = self.out_features + new_out_features
 
