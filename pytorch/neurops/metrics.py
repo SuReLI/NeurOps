@@ -37,11 +37,13 @@ Measure effective rank of whole layer via thresholding singular values of
 activations (or weights)
 """
 def effective_rank(tensor: torch.Tensor = None, threshold: float = 0.01, 
-                 partial: bool = False, scale: bool = True):
+                 partial: bool = False, scale: bool = True, limit_ratio = -1):
     if tensor is None:
         return None
     if len(tensor.shape) > 2:
         tensor = torch.transpose(torch.transpose(tensor, 0, 1).reshape(tensor.shape[1], -1), 0, 1)
+        if limit_ratio > 0 and tensor.shape[0]/tensor.shape[1] > limit_ratio:
+            tensor = tensor[:tensor.shape[1]*limit_ratio]
     if scale:
         tensor = tensor.clone() / tensor.shape[1]**0.5
     _, S, _ = torch.svd(tensor, compute_uv=False)
@@ -58,7 +60,7 @@ def orthogonality_gap(activations: torch.Tensor = None):
     if activations is None:
         return None
     if len(activations.shape) > 2:
-       activations = activations.reshape(activations.shape[0], -1)
+        activations = activations.reshape(activations.shape[0], -1)
     cov = activations @ activations.t()
     return torch.norm(cov/(torch.norm(activations)**2) - torch.eye(activations.shape[0]).to(cov.device)/activations.shape[0], p='fro')
 
@@ -69,7 +71,7 @@ computation
 Used by Maile et al. (2022) for selection of neurogenesis initialization candidates
 """
 def svd_score(tensor: torch.Tensor = None, threshold: float = 0.01, addwhole: bool = False, 
-             scale: bool = True, difference: bool = False):
+             scale: bool = True, difference: bool = False, limit_ratio = -1):
     if tensor is None:
         return None
     if difference:
@@ -84,6 +86,8 @@ def svd_score(tensor: torch.Tensor = None, threshold: float = 0.01, addwhole: bo
         prunedtensor = torch.cat((tensor[:, :neuron], tensor[:, neuron+1:]), dim=1)
         if len(prunedtensor.shape) > 2:
             prunedtensor = prunedtensor.reshape(tensor.shape[0], -1)
+            if limit_ratio > 0 and prunedtensor.shape[1]/tensor.shape[0] > limit_ratio:
+                prunedtensor = prunedtensor[:, :tensor.shape[0]*limit_ratio]
         if scale:
             prunedtensor /= prunedtensor.shape[1]**0.5
         _, S, _ = torch.svd(prunedtensor, compute_uv=False)
