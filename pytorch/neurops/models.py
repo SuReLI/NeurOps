@@ -21,6 +21,8 @@ class ModSequential(nn.Sequential):
         
         super(ModSequential, self).__init__(*args)
 
+        self.test = False
+
         self.track_activations = track_activations
         self.track_auxiliary_gradients = track_auxiliary_gradients
 
@@ -69,17 +71,19 @@ class ModSequential(nn.Sequential):
     Saves the activations of a layer to the activations dictionary.
     """
     def _act_hook(self, name, module, input, output):
-        self.activations[name] = torch.cat((self.activations[name], output.cpu()), dim=0)
-        if self.activations[name].shape[0] > self.multiplier*self.activations[name].shape[1]:
-            self.activations[name] = self.activations[name][-self.multiplier*self.activations[name].shape[1]:]
+        if not self.test:
+            self.activations[name] = torch.cat((self.activations[name], output.cpu()), dim=0)
+            if self.activations[name].shape[0] > self.multiplier*self.activations[name].shape[1]:
+                self.activations[name] = self.activations[name][-self.multiplier*self.activations[name].shape[1]:]
     
     """
     Saves the input to the first layer to the activations dictionary.
     """
     def _input_hook(self, module, input):
-        self.activations["-1"] = torch.cat((self.activations["-1"], input[0].cpu()), dim=0)
-        if self.activations["-1"].shape[0] > self.multiplier*self.activations["-1"].shape[1]:
-            self.activations["-1"] = self.activations["-1"][-self.multiplier*self.activations["-1"].shape[1]:]
+        if not self.test:
+            self.activations["-1"] = torch.cat((self.activations["-1"], input[0].cpu()), dim=0)
+            if self.activations["-1"].shape[0] > self.multiplier*self.activations["-1"].shape[1]:
+                self.activations["-1"] = self.activations["-1"][-self.multiplier*self.activations["-1"].shape[1]:]
     
     def _act_shape_hook(self, module, input, output):
         self.conv_output_shape = output.shape[1:]
@@ -97,6 +101,24 @@ class ModSequential(nn.Sequential):
             else:
                 count += sum(p.numel() for p in self[i].parameters())
         return count
+    
+    def FLOPs_count(self, input = None, masked: bool = False, verbose: bool = False):
+        count = 0
+        x = torch.zeros_like(input)
+        for i in range(len(self)):
+            if isinstance(self[i], ModLinear) or isinstance(self[i], ModConv2d):
+                FLOPs, x = self[i].FLOPs_count(x, masked=masked, previous_mask = None if i == 0 or not self[i-1].masked else 
+                                                 self[i-1].mask_vector if i-1 != self.conversion_layer else 
+                                                 self[i-1].mask_vector.view(1,-1).tile(self.conversion_factor,1).view(-1))
+                count += FLOPs
+                if verbose:
+                    print(f"Layer {i}: {FLOPs} FLOPs")
+            else:
+                x = self[i](x)
+        return count
+
+    def clear_activations(self):
+        self.activations = defaultdict(torch.Tensor)
 
     def forward(self, x, auxiliaries: list = None, layer_index: int = -1):
         old_x = x
@@ -160,7 +182,7 @@ class ModSequential(nn.Sequential):
             elif index == layer_index and self.track_activations and len(self.activations[str(index)].shape) >= 2:
                 neurons_to_keep = range(self.activations[str(index)].shape[1])
                 neurons_to_keep = [
-                    ntk for ntk in neurons if ntk not in neurons]
+                    ntk for ntk in neurons_to_keep if ntk not in neurons]
                 self.activations[str(index)] = self.activations[str(index)][:, neurons_to_keep]
         if self.track_auxiliary_gradients:
             neurons_to_keep = range(self.auxiliaries[layer_index-1].shape[1])
